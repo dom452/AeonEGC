@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://6vlynlug1jn4"
+path="res://.godot/imported/atomic_visualizer.glsl-6fab89b387f4172801481dadc9c9870c.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/common/atomic_visualizer.glsl"
+dest_files=["res://.godot/imported/atomic_visualizer.glsl-6fab89b387f4172801481dadc9c9870c.res"]
+
+[params]
+

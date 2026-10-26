@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://galg5n0bpts5"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_emfil"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="RDShaderFile" uid="uid://47mudkf2vlvj" path="res://gpu_compute_system/world_gen/presets/01_water/water_base_generator.glsl" id="5_2n4pf"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="7_pconstant_atomic"]
+
+[sub_resource type="Resource" id="Resource_pconstant_water_liquid_height"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_water_temp"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+target_sub_layer_index = 6
+name = &"WATER.WATER_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_ground_temp"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_max_elev"]
+script = ExtResource("3_pcfg")
+config_property = "max_elevation"
+config_property = "max_elevation"
+name = &"max_elevation"
+value = 200.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_sea_lvl"]
+script = ExtResource("3_pcfg")
+config_property = "sea_level_ratio"
+config_property = "sea_level_ratio"
+name = &"sea_level_ratio"
+value = null
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_pconstant_atomic_liquid"]
+script = ExtResource("7_pconstant_atomic")
+target_domain = 1
+name = &"WATER.ATOMIC.LIQUID_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("3_pcfg")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 2
+shader_resource = ExtResource("5_2n4pf")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_pconstant_water_liquid_height"), SubResource("Resource_pconstant_water_temp"), SubResource("Resource_pconstant_ground_temp"), SubResource("Resource_max_elev"), SubResource("Resource_sea_lvl"), SubResource("Resource_pconstant_atomic_liquid"), SubResource("Resource_amult")])

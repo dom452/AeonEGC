@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bbvpv4a5fhhyu"
+path="res://.godot/imported/biome_seeding_generator.glsl-7a8facf7043f3f2ec13fee1b1603b56f.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/06_classification/biome_seeding_generator.glsl"
+dest_files=["res://.godot/imported/biome_seeding_generator.glsl-7a8facf7043f3f2ec13fee1b1603b56f.res"]
+
+[params]
+

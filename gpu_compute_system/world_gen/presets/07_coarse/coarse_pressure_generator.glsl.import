@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://c1vscd0ow55dw"
+path="res://.godot/imported/coarse_pressure_generator.glsl-391119eb45f1568dac069b33c0f14afa.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/07_coarse/coarse_pressure_generator.glsl"
+dest_files=["res://.godot/imported/coarse_pressure_generator.glsl-391119eb45f1568dac069b33c0f14afa.res"]
+
+[params]
+

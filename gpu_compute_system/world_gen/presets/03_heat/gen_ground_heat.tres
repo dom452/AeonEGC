@@ -1,0 +1,65 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://dqqfr71yfgkx0"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="3_fq6sv"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="3_hv1b0"]
+[ext_resource type="RDShaderFile" uid="uid://4og4wh2l7rry" path="res://gpu_compute_system/world_gen/presets/03_heat/ground_heat_generator.glsl" id="4_shdr"]
+
+[sub_resource type="Resource" id="Resource_ibwt1"]
+script = ExtResource("3_fq6sv")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_wagcl"]
+script = ExtResource("3_fq6sv")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_i5car"]
+script = ExtResource("3_fq6sv")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_fq6sv"]
+script = ExtResource("3_hv1b0")
+target_domain = 2
+target_sub_layer_index = 2
+name = &"ENERGY.ATOMIC.GEOTHERMAL"
+value = 0
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_sol_scale"]
+script = ExtResource("2_flx72")
+name = &"solar_heat_scale"
+value = 35.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_geo_scale"]
+script = ExtResource("2_flx72")
+name = &"geothermal_heat_scale"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_lapse"]
+script = ExtResource("2_flx72")
+name = &"lapse_rate"
+value = 5.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("2_flx72")
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_ibwt1"), SubResource("Resource_wagcl"), SubResource("Resource_i5car"), SubResource("Resource_fq6sv"), SubResource("Resource_sol_scale"), SubResource("Resource_geo_scale"), SubResource("Resource_lapse"), SubResource("Resource_amult")])

@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://bytysu616odba"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_pc"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="2_ls"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="3_sl"]
+[ext_resource type="Script" uid="uid://b66f7giycuqcj" path="res://gpu_compute_system/common/push_constant_sim_layer_coarse.gd" id="4_slc"]
+[ext_resource type="RDShaderFile" uid="uid://dru68jctb7gyv" path="res://gpu_compute_system/world_sim/presets/05_coarse/fine_to_coarse_downsample.glsl" id="5_shdr"]
+
+[sub_resource type="Resource" id="Resource_c_air_temp"]
+script = ExtResource("4_slc")
+target_coarse_layer = 6
+name = &"COARSE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_terrain"]
+script = ExtResource("4_slc")
+target_coarse_layer = 7
+name = &"COARSE.TERRAIN"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_roughness"]
+script = ExtResource("4_slc")
+target_coarse_layer = 8
+name = &"COARSE.ROUGHNESS"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_air_temp"]
+script = ExtResource("3_sl")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_bedrock"]
+script = ExtResource("3_sl")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_sediment"]
+script = ExtResource("3_sl")
+target_sub_layer_index = 3
+name = &"LANDSCAPE.SEDIMENT_HEIGHT"
+value = null
+
+[resource]
+script = ExtResource("2_ls")
+system_name = 2
+shader_resource = ExtResource("5_shdr")
+is_coarse = true
+push_constants_resources = Array[ExtResource("1_pc")]([SubResource("Resource_c_air_temp"), SubResource("Resource_c_terrain"), SubResource("Resource_c_roughness"), SubResource("Resource_f_air_temp"), SubResource("Resource_f_bedrock"), SubResource("Resource_f_sediment")])

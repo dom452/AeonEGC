@@ -1,0 +1,210 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://pnvqbq125wmm"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_push_config"]
+[ext_resource type="RDShaderFile" uid="uid://clubrnjxpdy7o" path="res://gpu_compute_system/world_sim/presets/03_ecology/flora_ecology_sim.glsl" id="4_shader"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="5_dtern"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="5_pconstant"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="6_pconstant_atomic"]
+
+[sub_resource type="Resource" id="Resource_growth_rate_mod"]
+script = ExtResource("5_pconstant")
+target_domain = 4
+name = &"FLORA.GROWTH_RATE_MODIFIER"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_canopy_shade"]
+script = ExtResource("5_pconstant")
+target_domain = 4
+target_sub_layer_index = 1
+name = &"FLORA.CANOPY_SHADE"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_scent_grasses"]
+script = ExtResource("5_pconstant")
+target_domain = 5
+target_sub_layer_index = 9
+name = &"FAUNA.SCENT_FLORA_GRASSES"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_scent_shrubs"]
+script = ExtResource("5_pconstant")
+target_domain = 5
+target_sub_layer_index = 10
+name = &"FAUNA.SCENT_FLORA_SHRUBS"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_scent_trees"]
+script = ExtResource("5_pconstant")
+target_domain = 5
+target_sub_layer_index = 11
+name = &"FAUNA.SCENT_FLORA_TREES"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ground_temp"]
+script = ExtResource("5_pconstant")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_air_temp"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_humidity"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 3
+name = &"ATMOSPHERE.HUMIDITY"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_sunlight"]
+script = ExtResource("5_pconstant")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_liquid_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ice_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_a_grasses"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+name = &"FLORA.ATOMIC.GRASSES"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_shrubs"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 1
+name = &"FLORA.ATOMIC.SHRUBS"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_trees"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 2
+name = &"FLORA.ATOMIC.TREES_CANOPY"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_aquatic"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 3
+name = &"FLORA.ATOMIC.AQUATIC"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_detritus"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 4
+name = &"FLORA.ATOMIC.FLORA_DETRITUS"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_nutrients"]
+script = ExtResource("6_pconstant_atomic")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.ATOMIC.SOIL_NUTRIENTS"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "flora_atomic_multiplier"
+config_property = "flora_atomic_multiplier"
+name = &"flora_atomic_multiplier"
+value = 1000000.0
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_atomic_mult_actual"]
+script = ExtResource("2_push_config")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_base_growth_rate"]
+script = ExtResource("1_push_const")
+name = &"base_growth_rate"
+value = 2.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_dieoff_rate"]
+script = ExtResource("1_push_const")
+name = &"dieoff_rate"
+value = 0.05
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_decomp_rate"]
+script = ExtResource("1_push_const")
+name = &"decomposition_rate"
+value = 0.1
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_succ_gs"]
+script = ExtResource("2_push_config")
+config_property = "succ_grass_to_shrub"
+config_property = "succ_grass_to_shrub"
+name = &"succ_grass_to_shrub"
+value = Vector2(0.1, 0.5)
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_succ_st"]
+script = ExtResource("2_push_config")
+config_property = "succ_shrub_to_tree"
+config_property = "succ_shrub_to_tree"
+name = &"succ_shrub_to_tree"
+value = Vector2(0.1, 0.5)
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_comp_s"]
+script = ExtResource("2_push_config")
+config_property = "shrub_competition"
+config_property = "shrub_competition"
+name = &"shrub_competition"
+value = Vector2(0.1, 0.5)
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_comp_t"]
+script = ExtResource("2_push_config")
+config_property = "tree_competition"
+config_property = "tree_competition"
+name = &"tree_competition"
+value = Vector2(0.25, 1)
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[resource]
+script = ExtResource("5_dtern")
+system_name = 3
+shader_resource = ExtResource("4_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Resource_growth_rate_mod"), SubResource("Resource_canopy_shade"), SubResource("Resource_scent_grasses"), SubResource("Resource_scent_shrubs"), SubResource("Resource_scent_trees"), SubResource("Resource_ground_temp"), SubResource("Resource_air_temp"), SubResource("Resource_humidity"), SubResource("Resource_sunlight"), SubResource("Resource_liquid_height"), SubResource("Resource_ice_height"), SubResource("Resource_a_grasses"), SubResource("Resource_a_shrubs"), SubResource("Resource_a_trees"), SubResource("Resource_a_aquatic"), SubResource("Resource_a_detritus"), SubResource("Resource_a_nutrients"), SubResource("Resource_atomic_mult"), SubResource("Resource_atomic_mult_actual"), SubResource("Resource_base_growth_rate"), SubResource("Resource_dieoff_rate"), SubResource("Resource_decomp_rate"), SubResource("Resource_succ_gs"), SubResource("Resource_succ_st"), SubResource("Resource_comp_s"), SubResource("Resource_comp_t")])

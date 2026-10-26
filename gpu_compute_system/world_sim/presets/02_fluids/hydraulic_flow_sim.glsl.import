@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://byeb3v38ogxbw"
+path="res://.godot/imported/hydraulic_flow_sim.glsl-54b3f4c2bffcdb5ef81717b13d110459.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/02_fluids/hydraulic_flow_sim.glsl"
+dest_files=["res://.godot/imported/hydraulic_flow_sim.glsl-54b3f4c2bffcdb5ef81717b13d110459.res"]
+
+[params]
+

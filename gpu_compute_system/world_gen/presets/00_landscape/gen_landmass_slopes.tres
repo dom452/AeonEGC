@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://dsd0maqpgt0qk"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_1ktuy"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_hk00r"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_iv5wj"]
+[ext_resource type="RDShaderFile" uid="uid://b1nm0hlnlr1bo" path="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_slopes_generator.glsl" id="5_iv5wj"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+
+[sub_resource type="Resource" id="Resource_pconstant_bedrock"]
+script = ExtResource("6_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slope_x"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.SLOPE.X"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slope_y"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 2
+name = &"LANDSCAPE.SLOPE.Y"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[resource]
+script = ExtResource("3_iv5wj")
+shader_resource = ExtResource("5_iv5wj")
+push_constants_resources = Array[ExtResource("2_hk00r")]([SubResource("Resource_pconstant_bedrock"), SubResource("Resource_pconstant_slope_x"), SubResource("Resource_pconstant_slope_y")])

@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://t41uvxn86qlx"
+path="res://.godot/imported/player_actions_sim.glsl-e92a0fe5f1dd98658535ab7c225e1325.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/04_player_actions/player_actions_sim.glsl"
+dest_files=["res://.godot/imported/player_actions_sim.glsl-e92a0fe5f1dd98658535ab7c225e1325.res"]
+
+[params]
+

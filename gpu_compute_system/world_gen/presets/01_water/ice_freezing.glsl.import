@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cqtwud1dp3wko"
+path="res://.godot/imported/ice_freezing.glsl-3705ea01d800149b801dabd3d69be10a.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/01_water/ice_freezing.glsl"
+dest_files=["res://.godot/imported/ice_freezing.glsl-3705ea01d800149b801dabd3d69be10a.res"]
+
+[params]
+

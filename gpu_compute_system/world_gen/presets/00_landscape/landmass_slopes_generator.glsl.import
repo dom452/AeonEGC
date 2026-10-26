@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://b1nm0hlnlr1bo"
+path="res://.godot/imported/landmass_slopes_generator.glsl-dbd4074c1e5538772507231b3bb58bce.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_slopes_generator.glsl"
+dest_files=["res://.godot/imported/landmass_slopes_generator.glsl-dbd4074c1e5538772507231b3bb58bce.res"]
+
+[params]
+

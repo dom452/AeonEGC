@@ -1,0 +1,59 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://ckd7d37qq2dji"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://d3rw2kmo2lluw" path="res://gpu_compute_system/common/fast_noise_image.gd" id="4_fn"]
+[ext_resource type="RDShaderFile" uid="uid://sxxl7kwtnuld" path="res://gpu_compute_system/world_gen/presets/01_water/artesian_source_generator.glsl" id="5_shdr"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="7_pconstant_atomic"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_art"]
+noise_type = 2
+frequency = 0.08
+fractal_type = 0
+cellular_distance_function = 1
+cellular_return_type = 0
+
+[sub_resource type="Resource" id="Resource_fn"]
+script = ExtResource("4_fn")
+noise = SubResource("FastNoiseLite_art")
+metadata/_custom_type_script = "uid://d3rw2kmo2lluw"
+
+[sub_resource type="Resource" id="Resource_pconstant_artesian"]
+script = ExtResource("7_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 2
+name = &"WATER.ATOMIC.ARTESIAN_SOURCES"
+value = null
+metadata/_custom_type_script = "uid://c0da3465a23d"
+
+[sub_resource type="Resource" id="Resource_thres"]
+script = ExtResource("2_flx72")
+name = &"artesian_threshold"
+value = 0.8
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_base"]
+script = ExtResource("2_flx72")
+name = &"artesian_base_amount"
+value = 5.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_scale"]
+script = ExtResource("2_flx72")
+name = &"artesian_scale"
+value = 20.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("2_flx72")
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 2
+shader_resource = ExtResource("5_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_pconstant_artesian"), SubResource("Resource_thres"), SubResource("Resource_base"), SubResource("Resource_scale"), SubResource("Resource_amult")])
+custom_images = Array[ExtResource("1_cmig")]([SubResource("Resource_fn")])

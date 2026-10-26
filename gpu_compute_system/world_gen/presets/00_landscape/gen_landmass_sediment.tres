@@ -1,0 +1,80 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://bd4ssrovuau2w"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_82oy1"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_chgyk"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_31upb"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="RDShaderFile" uid="uid://ccc0ke3gqb151" path="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_sediment_generator.glsl" id="4_chgyk"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+
+[sub_resource type="Resource" id="Resource_pconstant_bedrock"]
+script = ExtResource("6_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slope_x"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.SLOPE.X"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slope_y"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 2
+name = &"LANDSCAPE.SLOPE.Y"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_sediment"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 3
+name = &"LANDSCAPE.SEDIMENT_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_xf13q"]
+script = ExtResource("2_chgyk")
+name = &"BLUR_DIRECTIONS"
+value = 8.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_ffnjg"]
+script = ExtResource("2_chgyk")
+name = &"BLUR_QUALITY"
+value = 4.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_oi6vy"]
+script = ExtResource("2_chgyk")
+name = &"BLUR_SIZE"
+value = 32.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_rcvjb"]
+script = ExtResource("2_chgyk")
+name = &"SEDIMENT_STICK_FACTOR"
+value = 4.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_max_elev"]
+script = ExtResource("3_pcfg")
+config_property = "max_elevation"
+config_property = "max_elevation"
+name = &"max_elevation"
+value = 200.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_max_sed"]
+script = ExtResource("3_pcfg")
+config_property = "max_sediment_depth"
+config_property = "max_sediment_depth"
+name = &"max_sediment_depth"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_31upb")
+shader_resource = ExtResource("4_chgyk")
+push_constants_resources = Array[ExtResource("2_chgyk")]([SubResource("Resource_pconstant_bedrock"), SubResource("Resource_pconstant_slope_x"), SubResource("Resource_pconstant_slope_y"), SubResource("Resource_pconstant_sediment"), SubResource("Resource_xf13q"), SubResource("Resource_ffnjg"), SubResource("Resource_oi6vy"), SubResource("Resource_rcvjb"), SubResource("Resource_max_elev"), SubResource("Resource_max_sed")])

@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://47mudkf2vlvj"
+path="res://.godot/imported/water_base_generator.glsl-72ab84370a5adeefc3c00194433ccefc.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/01_water/water_base_generator.glsl"
+dest_files=["res://.godot/imported/water_base_generator.glsl-72ab84370a5adeefc3c00194433ccefc.res"]
+
+[params]
+

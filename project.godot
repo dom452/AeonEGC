@@ -1,0 +1,392 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Aeon"
+run/main_scene="uid://dquc32auncxxg"
+config/features=PackedStringArray("4.6", "Forward Plus")
+config/icon="res://icon.svg"
+
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/max_log_files=1
+gdscript/warnings/untyped_declaration=1
+gdscript/warnings/inferred_declaration=1
+gdscript/warnings/unsafe_property_access=1
+gdscript/warnings/unsafe_method_access=1
+gdscript/warnings/unsafe_cast=1
+gdscript/warnings/unsafe_call_argument=1
+gdscript/warnings/missing_await=1
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+
+[dotnet]
+
+project/assembly_name="Aeon"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/copy_all_errors/plugin.cfg")
+
+[filesystem]
+
+import/blender/enabled=false
+
+[input]
+
+camera_orbit={
+"deadzone": 0.2,
+"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":2,"canceled":false,"pressed":false,"double_click":false,"script":null)
+]
+}
+camera_zoom_in={
+"deadzone": 0.2,
+"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":4,"canceled":false,"pressed":false,"double_click":false,"script":null)
+]
+}
+camera_zoom_out={
+"deadzone": 0.2,
+"events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":5,"canceled":false,"pressed":false,"double_click":false,"script":null)
+]
+}
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+rendering_device/driver.windows="d3d12"
+environment/glow/upscale_mode=0
+
+[shader_globals]
+
+F_LANDSCAPE_BedrockHeight=Dictionary[String, Variant]({
+"type": "int",
+"value": 0
+})
+F_LANDSCAPE_SlopeX=Dictionary[String, Variant]({
+"type": "int",
+"value": 1
+})
+F_LANDSCAPE_SlopeY=Dictionary[String, Variant]({
+"type": "int",
+"value": 2
+})
+F_LANDSCAPE_SedimentHeight=Dictionary[String, Variant]({
+"type": "int",
+"value": 3
+})
+F_LANDSCAPE_GroundTemp=Dictionary[String, Variant]({
+"type": "int",
+"value": 4
+})
+F_WATER_WaterLiquidHeight=Dictionary[String, Variant]({
+"type": "int",
+"value": 5
+})
+F_WATER_WaterIceHeight=Dictionary[String, Variant]({
+"type": "int",
+"value": 6
+})
+F_WATER_NetVelocityX=Dictionary[String, Variant]({
+"type": "int",
+"value": 7
+})
+F_WATER_NetVelocityY=Dictionary[String, Variant]({
+"type": "int",
+"value": 8
+})
+F_WATER_Divergence=Dictionary[String, Variant]({
+"type": "int",
+"value": 9
+})
+F_WATER_Turbulence=Dictionary[String, Variant]({
+"type": "int",
+"value": 10
+})
+F_WATER_WaterTemp=Dictionary[String, Variant]({
+"type": "int",
+"value": 11
+})
+F_ENERGY_Sunlight=Dictionary[String, Variant]({
+"type": "int",
+"value": 12
+})
+F_ATMOSPHERE_WindX=Dictionary[String, Variant]({
+"type": "int",
+"value": 14
+})
+F_ATMOSPHERE_WindY=Dictionary[String, Variant]({
+"type": "int",
+"value": 15
+})
+F_ATMOSPHERE_AirTemp=Dictionary[String, Variant]({
+"type": "int",
+"value": 16
+})
+F_ATMOSPHERE_Humidity=Dictionary[String, Variant]({
+"type": "int",
+"value": 17
+})
+F_ATMOSPHERE_Rain=Dictionary[String, Variant]({
+"type": "int",
+"value": 18
+})
+F_ATMOSPHERE_Snow=Dictionary[String, Variant]({
+"type": "int",
+"value": 19
+})
+F_FLORA_GrowthRateModifier=Dictionary[String, Variant]({
+"type": "int",
+"value": 21
+})
+F_FLORA_CanopyShade=Dictionary[String, Variant]({
+"type": "int",
+"value": 22
+})
+F_SMOKETEST_SmoketestU=Dictionary[String, Variant]({
+"type": "int",
+"value": 40
+})
+F_SMOKETEST_SmoketestV=Dictionary[String, Variant]({
+"type": "int",
+"value": 41
+})
+A_LANDSCAPE_Minerals=Dictionary[String, Variant]({
+"type": "int",
+"value": 0
+})
+A_LANDSCAPE_SoilNutrients=Dictionary[String, Variant]({
+"type": "int",
+"value": 1
+})
+A_LANDSCAPE_MagicSaturation=Dictionary[String, Variant]({
+"type": "int",
+"value": 2
+})
+A_LANDSCAPE_BiomeType=Dictionary[String, Variant]({
+"type": "int",
+"value": 3
+})
+A_WATER_LiquidVolume=Dictionary[String, Variant]({
+"type": "int",
+"value": 4
+})
+A_WATER_IceVolume=Dictionary[String, Variant]({
+"type": "int",
+"value": 5
+})
+A_WATER_ArtesianSources=Dictionary[String, Variant]({
+"type": "int",
+"value": 6
+})
+A_WATER_MagicSaturation=Dictionary[String, Variant]({
+"type": "int",
+"value": 8
+})
+A_ENERGY_MagicMagnitude=Dictionary[String, Variant]({
+"type": "int",
+"value": 9
+})
+A_ENERGY_MagicType=Dictionary[String, Variant]({
+"type": "int",
+"value": 10
+})
+A_ENERGY_Geothermal=Dictionary[String, Variant]({
+"type": "int",
+"value": 11
+})
+A_ATMOSPHERE_PollutionDensity=Dictionary[String, Variant]({
+"type": "int",
+"value": 12
+})
+A_ATMOSPHERE_MagicSaturation=Dictionary[String, Variant]({
+"type": "int",
+"value": 13
+})
+A_FLORA_Grasses=Dictionary[String, Variant]({
+"type": "int",
+"value": 14
+})
+A_FLORA_Shrubs=Dictionary[String, Variant]({
+"type": "int",
+"value": 15
+})
+A_FLORA_TreesCanopy=Dictionary[String, Variant]({
+"type": "int",
+"value": 16
+})
+A_FLORA_Aquatic=Dictionary[String, Variant]({
+"type": "int",
+"value": 17
+})
+A_FLORA_FloraDetritus=Dictionary[String, Variant]({
+"type": "int",
+"value": 18
+})
+A_FLORA_MagicSaturation=Dictionary[String, Variant]({
+"type": "int",
+"value": 19
+})
+A_FAUNA_Carrion=Dictionary[String, Variant]({
+"type": "int",
+"value": 20
+})
+A_FAUNA_AnimalWaste=Dictionary[String, Variant]({
+"type": "int",
+"value": 21
+})
+A_PLAYER_ACTIONS_ActionKey=Dictionary[String, Variant]({
+"type": "int",
+"value": 22
+})
+F_ENERGY_TidalForce=Dictionary[String, Variant]({
+"type": "int",
+"value": 13
+})
+A_WATER_Salinity=Dictionary[String, Variant]({
+"type": "int",
+"value": 7
+})
+F_FAUNA_ScentHuntInsect=Dictionary[String, Variant]({
+"type": "int",
+"value": 23
+})
+F_FAUNA_ScentHuntSmall=Dictionary[String, Variant]({
+"type": "int",
+"value": 24
+})
+F_FAUNA_ScentHuntMed=Dictionary[String, Variant]({
+"type": "int",
+"value": 25
+})
+F_FAUNA_ScentHuntLarge=Dictionary[String, Variant]({
+"type": "int",
+"value": 26
+})
+F_FAUNA_ScentHuntMega=Dictionary[String, Variant]({
+"type": "int",
+"value": 27
+})
+F_FAUNA_ScentMuskHerb=Dictionary[String, Variant]({
+"type": "int",
+"value": 28
+})
+F_FAUNA_ScentMuskCarn=Dictionary[String, Variant]({
+"type": "int",
+"value": 29
+})
+F_FAUNA_ScentDecay=Dictionary[String, Variant]({
+"type": "int",
+"value": 30
+})
+F_FAUNA_ScentWaste=Dictionary[String, Variant]({
+"type": "int",
+"value": 31
+})
+F_FAUNA_ScentFloraGrasses=Dictionary[String, Variant]({
+"type": "int",
+"value": 32
+})
+F_FAUNA_ScentFloraShrubs=Dictionary[String, Variant]({
+"type": "int",
+"value": 33
+})
+F_FAUNA_ScentFloraTrees=Dictionary[String, Variant]({
+"type": "int",
+"value": 34
+})
+F_FAUNA_ScentFloraFruits=Dictionary[String, Variant]({
+"type": "int",
+"value": 35
+})
+F_FAUNA_ScentFloraFunghi=Dictionary[String, Variant]({
+"type": "int",
+"value": 36
+})
+F_FAUNA_ScentMoisture=Dictionary[String, Variant]({
+"type": "int",
+"value": 37
+})
+F_FAUNA_ScentArcane=Dictionary[String, Variant]({
+"type": "int",
+"value": 38
+})
+F_FAUNA_ScentFear=Dictionary[String, Variant]({
+"type": "int",
+"value": 39
+})
+u_camera_distance={
+"type": "float",
+"value": 0.0
+}
+u_camera_zoom_pct={
+"type": "float",
+"value": 0.0
+}
+u_camera_target_uv={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+u_camera_uv_velocity={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+u_camera_world_pos={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+u_camera_dir_world={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+u_camera_target_uv_next_frame={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+u_camera_target_uv_1s={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+F_ATMOSPHERE_Pressure=Dictionary[String, Variant]({
+"type": "int",
+"value": 20
+})
+u_hover_cell_coord={
+"type": "ivec2",
+"value": Vector2i(0, 0)
+}
+u_hover_active={
+"type": "float",
+"value": 0.0
+}
+A_PLAYER_ACTIONS_ActionValue=Dictionary[String, Variant]({
+"type": "int",
+"value": 23
+})
+A_PLAYER_ACTIONS_Feedback=Dictionary[String, Variant]({
+"type": "int",
+"value": 24
+})
+u_hover_uv={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+A_PLAYER_ACTIONS_SpellGeothermal=Dictionary[String, Variant]({
+"type": "int",
+"value": 25
+})

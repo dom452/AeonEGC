@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dl7y6rdfbmvjf"
+path="res://.godot/imported/simulation_glsl_template.glsl-295a535e8da796935c599455b35ea1cb.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/simulation_glsl_template.glsl"
+dest_files=["res://.godot/imported/simulation_glsl_template.glsl-295a535e8da796935c599455b35ea1cb.res"]
+
+[params]
+

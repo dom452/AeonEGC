@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cld4vvk3t3hnb"
+path="res://.godot/imported/smoke_test_world_sim.glsl-222d94482adf18405875ef44366cf27e.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/debug/smoke_test_world_sim.glsl"
+dest_files=["res://.godot/imported/smoke_test_world_sim.glsl-222d94482adf18405875ef44366cf27e.res"]
+
+[params]
+

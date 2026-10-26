@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://4og4wh2l7rry"
+path="res://.godot/imported/ground_heat_generator.glsl-47f7eb425b7219514d03cfbd6a7ec4cf.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/03_heat/ground_heat_generator.glsl"
+dest_files=["res://.godot/imported/ground_heat_generator.glsl-47f7eb425b7219514d03cfbd6a7ec4cf.res"]
+
+[params]
+

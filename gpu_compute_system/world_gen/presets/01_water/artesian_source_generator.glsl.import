@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://sxxl7kwtnuld"
+path="res://.godot/imported/artesian_source_generator.glsl-0c70ed01d1d590bdfef57cdf608d80e4.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/01_water/artesian_source_generator.glsl"
+dest_files=["res://.godot/imported/artesian_source_generator.glsl-0c70ed01d1d590bdfef57cdf608d80e4.res"]
+
+[params]
+

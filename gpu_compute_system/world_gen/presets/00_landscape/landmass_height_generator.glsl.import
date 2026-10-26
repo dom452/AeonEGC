@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cjtswq18gqqvi"
+path="res://.godot/imported/landmass_height_generator.glsl-e0157fa0071394e9b283b46377dc6d8c.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_height_generator.glsl"
+dest_files=["res://.godot/imported/landmass_height_generator.glsl-e0157fa0071394e9b283b46377dc6d8c.res"]
+
+[params]
+

@@ -1,0 +1,54 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://dio4fey0aqq0o"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="3_ies4s"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="RDShaderFile" uid="uid://duf5wo6fgfua0" path="res://gpu_compute_system/world_gen/presets/03_heat/temp_rebalance_ice.glsl" id="4_shdr"]
+
+[sub_resource type="Resource" id="Resource_m3o2y"]
+script = ExtResource("3_ies4s")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_3srn8"]
+script = ExtResource("3_ies4s")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ccbi5"]
+script = ExtResource("3_ies4s")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_thres"]
+script = ExtResource("3_pcfg")
+config_property = "freeze_threshold"
+config_property = "freeze_threshold"
+name = &"freeze_threshold"
+value = -4.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_cool"]
+script = ExtResource("3_pcfg")
+config_property = "thermal_ice_influence"
+config_property = "thermal_ice_influence"
+name = &"cooling_factor"
+value = 0.05
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 1
+is_enabled = false
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_m3o2y"), SubResource("Resource_3srn8"), SubResource("Resource_ccbi5"), SubResource("Resource_thres"), SubResource("Resource_cool")])

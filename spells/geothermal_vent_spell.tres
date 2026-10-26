@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="PlayerSpell" format=3 uid="uid://bspellgeovent"]
+
+[ext_resource type="Script" uid="uid://cj8jfhufuvjmm" path="res://spells/player_spell.gd" id="1_spell"]
+
+[resource]
+script = ExtResource("1_spell")
+spell_name = "Magic Geothermal Vent"
+description = "Opens a permanent geothermal vent at the target cell, injecting heat into the ground until dispelled."
+cost = 1
+magnitude = 500.0
+metadata/_custom_type_script = "uid://bygeothermalvent"

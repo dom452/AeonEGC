@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://ddj2hqeh7cein"
+path="res://.godot/imported/thermodynamics_generator.glsl-d2565d764ca24256842f185e767d6199.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/04_thermodynamics/thermodynamics_generator.glsl"
+dest_files=["res://.godot/imported/thermodynamics_generator.glsl-d2565d764ca24256842f185e767d6199.res"]
+
+[params]
+

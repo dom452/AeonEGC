@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="PushConstant_TimeMSec" format=3 uid="uid://dpes4g7a1vl2d"]
+
+[ext_resource type="Script" uid="uid://nsd0ig2fyeux" path="res://gpu_compute_system/common/push_constant_timemsec.gd" id="1_wjawr"]
+
+[resource]
+script = ExtResource("1_wjawr")
+name = &"TimeMsec"
+value = 0.0
+isDynamic = true
+metadata/_custom_type_script = "uid://nsd0ig2fyeux"

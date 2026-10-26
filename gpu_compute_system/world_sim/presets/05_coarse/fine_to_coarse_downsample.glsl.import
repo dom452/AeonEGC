@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dru68jctb7gyv"
+path="res://.godot/imported/fine_to_coarse_downsample.glsl-eae365235fe1da25c758e81ce1c56791.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/05_coarse/fine_to_coarse_downsample.glsl"
+dest_files=["res://.godot/imported/fine_to_coarse_downsample.glsl-eae365235fe1da25c758e81ce1c56791.res"]
+
+[params]
+

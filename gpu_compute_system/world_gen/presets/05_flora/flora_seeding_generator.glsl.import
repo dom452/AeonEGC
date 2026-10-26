@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://hcfm6ugmmwrw"
+path="res://.godot/imported/flora_seeding_generator.glsl-c0f5efd17a9def73d5da5496b3d02510.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/05_flora/flora_seeding_generator.glsl"
+dest_files=["res://.godot/imported/flora_seeding_generator.glsl-c0f5efd17a9def73d5da5496b3d02510.res"]
+
+[params]
+

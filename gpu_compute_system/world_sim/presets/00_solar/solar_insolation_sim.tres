@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://bgk4dbv47mg55"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="2_ueulg"]
+[ext_resource type="Script" uid="uid://nsd0ig2fyeux" path="res://gpu_compute_system/common/push_constant_timemsec.gd" id="2_vybb0"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="4_h5qxc"]
+[ext_resource type="RDShaderFile" uid="uid://wjc7856jtaj0" path="res://gpu_compute_system/world_sim/presets/00_solar/solar_insolation_sim.glsl" id="4_shader"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="5_h5qxc"]
+
+[sub_resource type="Resource" id="Resource_h5qxc"]
+script = ExtResource("2_ueulg")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_tidal"]
+script = ExtResource("2_ueulg")
+target_domain = 2
+target_sub_layer_index = 1
+name = &"ENERGY.TIDAL_FORCE"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ueulg"]
+script = ExtResource("2_vybb0")
+name = &"time_msec"
+value = null
+metadata/_custom_type_script = "uid://nsd0ig2fyeux"
+
+[sub_resource type="Resource" id="Resource_etwts"]
+script = ExtResource("4_h5qxc")
+config_property = "days_per_year"
+config_property = "days_per_year"
+name = &"days_per_year"
+value = null
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_nurl5"]
+script = ExtResource("4_h5qxc")
+config_property = "max_axial_tilt"
+config_property = "max_axial_tilt"
+name = &"max_axial_tilt"
+value = null
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_vi4ud"]
+script = ExtResource("4_h5qxc")
+config_property = "base_solar_power"
+config_property = "base_solar_power"
+name = &"base_solar_power"
+value = null
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_planet_diam"]
+script = ExtResource("4_h5qxc")
+config_property = "planetary_diameter"
+config_property = "planetary_diameter"
+name = &"planetary_diameter"
+value = null
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[resource]
+script = ExtResource("5_h5qxc")
+system_name = 1
+shader_resource = ExtResource("4_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Resource_h5qxc"), SubResource("Resource_tidal"), SubResource("Resource_ueulg"), SubResource("Resource_etwts"), SubResource("Resource_nurl5"), SubResource("Resource_vi4ud"), SubResource("Resource_planet_diam")])

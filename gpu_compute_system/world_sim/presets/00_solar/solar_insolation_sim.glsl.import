@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://wjc7856jtaj0"
+path="res://.godot/imported/solar_insolation_sim.glsl-19c6b1baae8cd3f624d5fb0dedc505e8.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/00_solar/solar_insolation_sim.glsl"
+dest_files=["res://.godot/imported/solar_insolation_sim.glsl-19c6b1baae8cd3f624d5fb0dedc505e8.res"]
+
+[params]
+

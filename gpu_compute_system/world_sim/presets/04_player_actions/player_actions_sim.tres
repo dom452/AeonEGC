@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://c76khbuh46mm4"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="2_pconstant_atomic"]
+[ext_resource type="Script" uid="uid://bdkjy7qa37phd" path="res://gpu_compute_system/common/push_constant_player_action.gd" id="3_pconstant_player_action"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="4_c15uu"]
+[ext_resource type="RDShaderFile" uid="uid://t41uvxn86qlx" path="res://gpu_compute_system/world_sim/presets/04_player_actions/player_actions_sim.glsl" id="5_shader"]
+
+[sub_resource type="Resource" id="Res_a_action_key"]
+script = ExtResource("2_pconstant_atomic")
+target_domain = 7
+name = &"PLAYER_ACTIONS.ATOMIC.ACTION_KEY"
+value = 0
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Res_a_feedback"]
+script = ExtResource("2_pconstant_atomic")
+target_domain = 7
+target_sub_layer_index = 2
+name = &"PLAYER_ACTIONS.ATOMIC.FEEDBACK"
+value = 0
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Res_pa_cell"]
+script = ExtResource("3_pconstant_player_action")
+field = 0
+name = &"PlayerAction.Cell"
+value = Vector2i(0, 0)
+metadata/_custom_type_script = "uid://bdkjy7qa37phd"
+
+[sub_resource type="Resource" id="Res_pa_uv"]
+script = ExtResource("3_pconstant_player_action")
+field = 1
+name = &"PlayerAction.UV"
+value = Vector2(0, 0)
+metadata/_custom_type_script = "uid://bdkjy7qa37phd"
+
+[sub_resource type="Resource" id="Res_pa_action_key"]
+script = ExtResource("3_pconstant_player_action")
+name = &"PlayerAction.ActionKey"
+value = 100
+metadata/_custom_type_script = "uid://bdkjy7qa37phd"
+
+[sub_resource type="Resource" id="Res_pa_action_value"]
+script = ExtResource("3_pconstant_player_action")
+field = 3
+name = &"PlayerAction.ActionValue"
+value = 1.0
+metadata/_custom_type_script = "uid://bdkjy7qa37phd"
+
+[resource]
+script = ExtResource("4_c15uu")
+system_name = 6
+shader_resource = ExtResource("5_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Res_a_action_key"), SubResource("Res_a_feedback"), SubResource("Res_pa_cell"), SubResource("Res_pa_uv"), SubResource("Res_pa_action_key"), SubResource("Res_pa_action_value")])

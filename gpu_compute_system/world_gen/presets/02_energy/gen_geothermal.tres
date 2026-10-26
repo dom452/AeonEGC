@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://bfxy45wqlawph"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="Script" uid="uid://d3rw2kmo2lluw" path="res://gpu_compute_system/common/fast_noise_image.gd" id="4_fn"]
+[ext_resource type="RDShaderFile" uid="uid://rx73b57u7fyl" path="res://gpu_compute_system/world_gen/presets/02_energy/geothermal_generator.glsl" id="5_shdr"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="7_pconstant_atomic"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_geo"]
+noise_type = 2
+frequency = 0.0257
+fractal_type = 0
+cellular_distance_function = 1
+cellular_return_type = 3
+
+[sub_resource type="Resource" id="Resource_fn"]
+script = ExtResource("4_fn")
+noise = SubResource("FastNoiseLite_geo")
+metadata/_custom_type_script = "uid://d3rw2kmo2lluw"
+
+[sub_resource type="Resource" id="Resource_jtfvi"]
+script = ExtResource("7_pconstant_atomic")
+target_domain = 2
+target_sub_layer_index = 2
+name = &"ENERGY.ATOMIC.GEOTHERMAL"
+value = 0
+
+[sub_resource type="Resource" id="Resource_geo_threshold"]
+script = ExtResource("2_flx72")
+name = &"geothermal_threshold"
+value = 0.8
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_geo_base"]
+script = ExtResource("2_flx72")
+name = &"geothermal_base"
+value = 10.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_geo_scale"]
+script = ExtResource("2_flx72")
+name = &"geothermal_scale"
+value = 40.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("3_pcfg")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 1
+shader_resource = ExtResource("5_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_jtfvi"), SubResource("Resource_geo_threshold"), SubResource("Resource_geo_base"), SubResource("Resource_geo_scale"), SubResource("Resource_amult")])
+custom_images = Array[ExtResource("1_cmig")]([SubResource("Resource_fn")])

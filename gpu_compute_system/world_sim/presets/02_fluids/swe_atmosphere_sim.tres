@@ -1,0 +1,192 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://bswe0atm0001s"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_push_config"]
+[ext_resource type="RDShaderFile" uid="uid://b1iyoqd41air3" path="res://gpu_compute_system/world_sim/presets/02_fluids/swe_atmosphere_sim.glsl" id="4_shader"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="5_pconstant"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="5_vmi8e"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="6_pconstant_atomic"]
+[ext_resource type="Script" uid="uid://b66f7giycuqcj" path="res://gpu_compute_system/common/push_constant_sim_layer_coarse.gd" id="7_pconstant_coarse"]
+
+[sub_resource type="Resource" id="Resource_wind_x"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+name = &"ATMOSPHERE.WIND.X"
+value = null
+
+[sub_resource type="Resource" id="Resource_wind_y"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 1
+name = &"ATMOSPHERE.WIND.Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_air_temp"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_humidity"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 3
+name = &"ATMOSPHERE.HUMIDITY"
+value = null
+
+[sub_resource type="Resource" id="Resource_rain"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 4
+name = &"ATMOSPHERE.RAIN"
+value = null
+
+[sub_resource type="Resource" id="Resource_snow"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 5
+name = &"ATMOSPHERE.SNOW"
+value = null
+
+[sub_resource type="Resource" id="Resource_pressure"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 6
+name = &"ATMOSPHERE.PRESSURE"
+value = null
+
+[sub_resource type="Resource" id="Resource_bedrock_height"]
+script = ExtResource("5_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_sediment_height"]
+script = ExtResource("5_pconstant")
+target_sub_layer_index = 3
+name = &"LANDSCAPE.SEDIMENT_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_water_temp"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 6
+name = &"WATER.WATER_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_liquid"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+name = &"WATER.ATOMIC.LIQUID_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_ice"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.ATOMIC.ICE_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_grasses"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+name = &"FLORA.ATOMIC.GRASSES"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_shrubs"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 1
+name = &"FLORA.ATOMIC.SHRUBS"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_trees"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 2
+name = &"FLORA.ATOMIC.TREES_CANOPY"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_h_upper"]
+script = ExtResource("7_pconstant_coarse")
+name = &"COARSE.H_UPPER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_h_lower"]
+script = ExtResource("7_pconstant_coarse")
+target_coarse_layer = 3
+name = &"COARSE.H_LOWER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_x"]
+script = ExtResource("7_pconstant_coarse")
+target_coarse_layer = 4
+name = &"COARSE.WIND_LOWER_X"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_y"]
+script = ExtResource("7_pconstant_coarse")
+target_coarse_layer = 5
+name = &"COARSE.WIND_LOWER_Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_terrain"]
+script = ExtResource("7_pconstant_coarse")
+target_coarse_layer = 7
+name = &"COARSE.TERRAIN"
+value = null
+
+[sub_resource type="Resource" id="Resource_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+
+[sub_resource type="Resource" id="Resource_flora_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "flora_atomic_multiplier"
+config_property = "flora_atomic_multiplier"
+name = &"flora_atomic_multiplier"
+value = 1000000.0
+
+[sub_resource type="Resource" id="Resource_coriolis"]
+script = ExtResource("2_push_config")
+config_property = "coriolis_strength"
+config_property = "coriolis_strength"
+name = &"coriolis_strength"
+value = 2.0
+
+[sub_resource type="Resource" id="Resource_wind_adv"]
+script = ExtResource("2_push_config")
+config_property = "wind_advection_scale"
+config_property = "wind_advection_scale"
+name = &"wind_advection_scale"
+value = 1.0
+
+[sub_resource type="Resource" id="Resource_evap"]
+script = ExtResource("2_push_config")
+config_property = "evaporation_rate"
+config_property = "evaporation_rate"
+name = &"evaporation_rate"
+value = 0.05
+
+[sub_resource type="Resource" id="Resource_precip"]
+script = ExtResource("2_push_config")
+config_property = "precipitation_rate"
+config_property = "precipitation_rate"
+name = &"precipitation_rate"
+value = 0.05
+
+[sub_resource type="Resource" id="Resource_latent_vap"]
+script = ExtResource("2_push_config")
+config_property = "latent_heat_vaporization"
+config_property = "latent_heat_vaporization"
+name = &"latent_heat_vaporization"
+value = 10.0
+
+[resource]
+script = ExtResource("5_vmi8e")
+system_name = 2
+shader_resource = ExtResource("4_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Resource_wind_x"), SubResource("Resource_wind_y"), SubResource("Resource_air_temp"), SubResource("Resource_humidity"), SubResource("Resource_rain"), SubResource("Resource_snow"), SubResource("Resource_pressure"), SubResource("Resource_bedrock_height"), SubResource("Resource_sediment_height"), SubResource("Resource_water_temp"), SubResource("Resource_a_liquid"), SubResource("Resource_a_ice"), SubResource("Resource_a_grasses"), SubResource("Resource_a_shrubs"), SubResource("Resource_a_trees"), SubResource("Resource_c_h_upper"), SubResource("Resource_c_h_lower"), SubResource("Resource_c_wind_lower_x"), SubResource("Resource_c_wind_lower_y"), SubResource("Resource_c_terrain"), SubResource("Resource_atomic_mult"), SubResource("Resource_flora_atomic_mult"), SubResource("Resource_coriolis"), SubResource("Resource_wind_adv"), SubResource("Resource_evap"), SubResource("Resource_precip"), SubResource("Resource_latent_vap")])

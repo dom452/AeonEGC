@@ -1,0 +1,202 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://0nkk0hlcrou6"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_ecy4g"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_worldpush"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_gen"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="4_k0261"]
+[ext_resource type="RDShaderFile" uid="uid://ddj2hqeh7cein" path="res://gpu_compute_system/world_gen/presets/04_thermodynamics/thermodynamics_generator.glsl" id="4_shdr"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+
+[sub_resource type="Resource" id="Resource_pconstant_liquid"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_ice"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_wtemp"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+target_sub_layer_index = 6
+name = &"WATER.WATER_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_windx"]
+script = ExtResource("6_pconstant")
+target_domain = 3
+name = &"ATMOSPHERE.WIND.X"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_windy"]
+script = ExtResource("6_pconstant")
+target_domain = 3
+target_sub_layer_index = 1
+name = &"ATMOSPHERE.WIND.Y"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_airtemp"]
+script = ExtResource("6_pconstant")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_humidity"]
+script = ExtResource("6_pconstant")
+target_domain = 3
+target_sub_layer_index = 3
+name = &"ATMOSPHERE.HUMIDITY"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_bedrock"]
+script = ExtResource("6_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slopex"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.SLOPE.X"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_slopey"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 2
+name = &"LANDSCAPE.SLOPE.Y"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_gtemp"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_sunlight"]
+script = ExtResource("6_pconstant")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_0eyip"]
+script = ExtResource("4_k0261")
+target_domain = 1
+name = &"WATER.ATOMIC.LIQUID_VOLUME"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_nmbrn"]
+script = ExtResource("4_k0261")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.ATOMIC.ICE_VOLUME"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_k40dm"]
+script = ExtResource("4_k0261")
+target_domain = 2
+target_sub_layer_index = 2
+name = &"ENERGY.ATOMIC.GEOTHERMAL"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("2_worldpush")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_heat"]
+script = ExtResource("2_worldpush")
+config_property = "heat_transfer_rate"
+config_property = "heat_transfer_rate"
+name = &"heat_transfer_rate"
+value = 0.05
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_evap"]
+script = ExtResource("1_push")
+name = &"evaporation_rate"
+value = 0.01
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_rot"]
+script = ExtResource("2_worldpush")
+config_property = "planet_rotation_vector"
+config_property = "planet_rotation_vector"
+name = &"planet_rotation_vector"
+value = Vector2(0, 1)
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_cor"]
+script = ExtResource("2_worldpush")
+config_property = "coriolis_strength"
+config_property = "coriolis_strength"
+name = &"coriolis_strength"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_fric"]
+script = ExtResource("2_worldpush")
+config_property = "wind_friction"
+config_property = "wind_friction"
+name = &"wind_friction"
+value = 0.98
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_ice_inf"]
+script = ExtResource("2_worldpush")
+config_property = "thermal_ice_influence"
+config_property = "thermal_ice_influence"
+name = &"thermal_ice_influence"
+value = 0.05
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_sol_scale"]
+script = ExtResource("1_push")
+name = &"solar_heat_scale"
+value = 35.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_geo_scale"]
+script = ExtResource("1_push")
+name = &"geothermal_heat_scale"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_lapse"]
+script = ExtResource("2_worldpush")
+config_property = "lapse_rate"
+config_property = "lapse_rate"
+name = &"lapse_rate"
+value = 15.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_gen")
+system_name = 1
+is_enabled = false
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("1_push")]([SubResource("Resource_pconstant_liquid"), SubResource("Resource_pconstant_ice"), SubResource("Resource_pconstant_wtemp"), SubResource("Resource_pconstant_windx"), SubResource("Resource_pconstant_windy"), SubResource("Resource_pconstant_airtemp"), SubResource("Resource_pconstant_humidity"), SubResource("Resource_pconstant_bedrock"), SubResource("Resource_pconstant_slopex"), SubResource("Resource_pconstant_slopey"), SubResource("Resource_pconstant_gtemp"), SubResource("Resource_pconstant_sunlight"), SubResource("Resource_0eyip"), SubResource("Resource_nmbrn"), SubResource("Resource_k40dm"), SubResource("Resource_amult"), SubResource("Resource_heat"), SubResource("Resource_evap"), SubResource("Resource_rot"), SubResource("Resource_cor"), SubResource("Resource_fric"), SubResource("Resource_ice_inf"), SubResource("Resource_sol_scale"), SubResource("Resource_geo_scale"), SubResource("Resource_lapse")])
+repeat_times = 1024

@@ -1,0 +1,62 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://b30kjhlxw61ii"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_scjih"]
+[ext_resource type="FastNoiseLite" uid="uid://dh416qxv1r0uy" path="res://gpu_compute_system/world_gen/presets/00_landscape/landscape_noise_0.tres" id="2_5ry6d"]
+[ext_resource type="Script" uid="uid://b0at2bmxeti1k" path="res://gpu_compute_system/common/fast_noise_image_spherical.gd" id="3_1rvv4"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="3_blg72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="4_qs8k2"]
+[ext_resource type="FastNoiseLite" uid="uid://dgiwabjji8u0g" path="res://gpu_compute_system/world_gen/presets/00_landscape/landscape_noise_1.tres" id="4_r615p"]
+[ext_resource type="FastNoiseLite" uid="uid://dsa4vi2owogvu" path="res://gpu_compute_system/world_gen/presets/00_landscape/landscape_noise_2.tres" id="5_nqfeq"]
+[ext_resource type="RDShaderFile" uid="uid://cjtswq18gqqvi" path="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_height_generator.glsl" id="5_scjih"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+
+[sub_resource type="Resource" id="Resource_q0fic"]
+script = ExtResource("3_1rvv4")
+noise = ExtResource("2_5ry6d")
+metadata/_custom_type_script = "uid://b0at2bmxeti1k"
+
+[sub_resource type="Resource" id="Resource_mpcny"]
+script = ExtResource("3_1rvv4")
+noise = ExtResource("4_r615p")
+metadata/_custom_type_script = "uid://b0at2bmxeti1k"
+
+[sub_resource type="Resource" id="Resource_pv2ws"]
+script = ExtResource("3_1rvv4")
+noise = ExtResource("5_nqfeq")
+metadata/_custom_type_script = "uid://b0at2bmxeti1k"
+
+[sub_resource type="Resource" id="Resource_pconstant_bedrock"]
+script = ExtResource("6_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_1vapg"]
+script = ExtResource("3_blg72")
+name = &"contrast"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_k3vpe"]
+script = ExtResource("3_blg72")
+name = &"base_elevation"
+value = 40.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_lkiwy"]
+script = ExtResource("3_blg72")
+name = &"terrain_height_variation"
+value = 20.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_po8ww"]
+script = ExtResource("3_blg72")
+name = &"detail_variation"
+value = 10.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("4_qs8k2")
+shader_resource = ExtResource("5_scjih")
+push_constants_resources = Array[ExtResource("3_blg72")]([SubResource("Resource_pconstant_bedrock"), SubResource("Resource_1vapg"), SubResource("Resource_k3vpe"), SubResource("Resource_lkiwy"), SubResource("Resource_po8ww")])
+custom_images = Array[ExtResource("1_scjih")]([SubResource("Resource_q0fic"), SubResource("Resource_mpcny"), SubResource("Resource_pv2ws")])

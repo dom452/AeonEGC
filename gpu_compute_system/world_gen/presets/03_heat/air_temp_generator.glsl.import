@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bwh03fabffttc"
+path="res://.godot/imported/air_temp_generator.glsl-07effd1cfc2fdf447d737e046132f8d3.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/03_heat/air_temp_generator.glsl"
+dest_files=["res://.godot/imported/air_temp_generator.glsl-07effd1cfc2fdf447d737e046132f8d3.res"]
+
+[params]
+

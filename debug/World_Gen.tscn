@@ -1,0 +1,408 @@
+[gd_scene format=3 uid="uid://dquc32auncxxg"]
+
+[ext_resource type="Script" uid="uid://gn3ooj0vsgj3" path="res://debug/world_gen_ux.gd" id="1_xoy7y"]
+[ext_resource type="Shader" uid="uid://c70wipl1dhu03" path="res://gpu_compute_system/common/visualise_sim_layer.gdshader" id="2_n33li"]
+[ext_resource type="Shader" uid="uid://dt0k00xseqhiw" path="res://gpu_compute_system/common/visualise_atomic_layer.gdshader" id="3_013od"]
+[ext_resource type="Script" uid="uid://n5p58tk3i6lu" path="res://tools/display_property.gd" id="3_ryvqp"]
+[ext_resource type="ArrayMesh" uid="uid://cehgtj1tf1qie" path="res://_assets/_meshes/SimSphere4096.obj" id="4_xoy7y"]
+[ext_resource type="Script" uid="uid://buwnsjhlyg0l1" path="res://debug/layer_channel_ui.gd" id="5_vwb56"]
+[ext_resource type="Shader" uid="uid://cpn31yy2j8yc" path="res://_assets/_shaders/vis_terrain.gdshader" id="6_013od"]
+[ext_resource type="Script" uid="uid://b47d346a6curx" path="res://core/game_state_manager.gd" id="6_n33li"]
+[ext_resource type="Script" uid="uid://bksg2eyea7r51" path="res://debug/sphere_visualiser.gd" id="6_ryvqp"]
+[ext_resource type="Script" uid="uid://dw5341e6gm1vr" path="res://debug/aeon_chronicle_panel.gd" id="7_chron"]
+[ext_resource type="Script" uid="uid://c3oj4gbr0q53u" path="res://camera/orbit_camera.gd" id="8_wakpg"]
+[ext_resource type="Script" uid="uid://cwxu32rxm5mak" path="res://debug/debug_spell_selector.gd" id="10_spellsel"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wakpg"]
+shader = ExtResource("2_n33li")
+shader_parameter/layer_to_view = 0
+shader_parameter/scale = 1.0
+shader_parameter/offset = 0.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7i8yo"]
+shader = ExtResource("3_013od")
+shader_parameter/layer_to_view = 0
+shader_parameter/scale = 1.0
+shader_parameter/offset = 0.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_013od"]
+render_priority = 0
+shader = ExtResource("6_013od")
+shader_parameter/u_grid_size = Vector2(512, 512)
+shader_parameter/col_hover_highlight = Color(1, 0.8, 0.2, 1)
+shader_parameter/u_hover_highlight_strength = 0.6
+shader_parameter/u_depth_shallow = 0.01
+shader_parameter/u_depth_deep = 0.2
+shader_parameter/col_water_shallow = Color(0.2, 0.6, 0.8, 1)
+shader_parameter/col_water_deep = Color(0, 0.1, 0.3, 1)
+shader_parameter/col_ice = Color(0.9, 0.95, 1, 1)
+shader_parameter/u_biome_border_strength = 1.0
+shader_parameter/u_biome_border_width_px = 2.0
+shader_parameter/u_biome_border_corner_radius = 0.35
+shader_parameter/col_biome_border = Color(0.8564939, 3.657937e-06, 8.663535e-07, 1)
+shader_parameter/u_debug_layer_mode = false
+shader_parameter/u_channel_src = PackedInt32Array(0, 0, 0)
+shader_parameter/u_channel_layer = PackedInt32Array(0, 0, 0)
+shader_parameter/u_channel_scale = PackedFloat32Array(0, 0, 0)
+shader_parameter/u_channel_offset = PackedFloat32Array(0, 0, 0)
+shader_parameter/u_slope_rock_threshold = 0.5
+shader_parameter/u_sediment_dirt_threshold = 0.1
+shader_parameter/col_rock = Color(0.5, 0.5, 0.5, 1)
+shader_parameter/col_dirt = Color(0.4, 0.3, 0.2, 1)
+shader_parameter/col_sand = Color(0.8, 0.7, 0.5, 1)
+shader_parameter/col_grass_light = Color(0.4, 0.8, 0.2, 1)
+shader_parameter/col_grass_dark = Color(0.1, 0.4, 0.1, 1)
+shader_parameter/col_trees = Color(0.05, 0.25, 0.05, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_013od"]
+noise_type = 3
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_wakpg"]
+noise_type = 2
+fractal_type = 2
+fractal_weighted_strength = 0.8
+cellular_return_type = 6
+
+[sub_resource type="Environment" id="Environment_xoy7y"]
+background_mode = 1
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.1
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_n33li"]
+
+[node name="Control" type="Control" unique_id=559011693]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="." unique_id=102524614]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GpuSched_DebugPanel" type="HBoxContainer" parent="ScrollContainer" unique_id=547637558 node_paths=PackedStringArray("game_state_manager", "float_layers_container", "atomic_layers_container")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_xoy7y")
+game_state_manager = NodePath("../../GameStateManager")
+float_material = SubResource("ShaderMaterial_wakpg")
+atomic_material = SubResource("ShaderMaterial_7i8yo")
+float_layers_container = NodePath("TabContainer/FloatLayers")
+atomic_layers_container = NodePath("TabContainer/AtomicLayers")
+default_layer_indices = Array[int]([5, 11, 0, 9])
+
+[node name="DebugPanel" type="VBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel" unique_id=1522717062]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
+
+[node name="GenerateWorld" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=351923264]
+custom_minimum_size = Vector2(100, 60)
+layout_mode = 2
+text = "Generate
+World"
+
+[node name="StartSim" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=453297935]
+custom_minimum_size = Vector2(100, 60)
+layout_mode = 2
+text = "Start Sim"
+
+[node name="StopSim" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=1279583674]
+custom_minimum_size = Vector2(100, 60)
+layout_mode = 2
+text = "Stop Sim"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=1730761347]
+layout_mode = 2
+
+[node name="Pause" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer" unique_id=1827309492]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+text = "Pause"
+
+[node name="SlowSim" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer" unique_id=651133859]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+text = "Slower"
+
+[node name="FastSim" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer" unique_id=347677540]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+text = "Faster"
+
+[node name="Fastest" type="Button" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer" unique_id=315996796]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+text = "4x"
+
+[node name="Telemetry" type="VBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=1210694800]
+clip_contents = true
+layout_mode = 2
+size_flags_vertical = 2
+
+[node name="FPS_Hbox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=176732283]
+layout_mode = 2
+
+[node name="fps_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/FPS_Hbox" unique_id=651776442]
+layout_mode = 2
+size_flags_vertical = 1
+text = "FPS: "
+
+[node name="fps_property" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/FPS_Hbox" unique_id=1885807301 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "deltaTime"
+clamped_decimals = 4
+
+[node name="SimSpeed_HBox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=2142694623]
+layout_mode = 2
+
+[node name="sim_speed_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/SimSpeed_HBox" unique_id=1070337228]
+layout_mode = 2
+size_flags_vertical = 1
+text = "sim speed:"
+
+[node name="sim_speed_property" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/SimSpeed_HBox" unique_id=1587128788 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "sim_speed"
+clamped_decimals = 1
+
+[node name="HoverCell_HBox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=1039922325]
+layout_mode = 2
+
+[node name="HoverCell_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/HoverCell_HBox" unique_id=1279116789]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Hovered Cell: "
+
+[node name="HoverCell_property" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/HoverCell_HBox" unique_id=1208049292 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "cursor_picker.hover_data.cell_coord"
+clamped_decimals = 1
+
+[node name="HoverUV_HBox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=465669180]
+layout_mode = 2
+
+[node name="HoverUV_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/HoverUV_HBox" unique_id=317332167]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Hovered UV: "
+
+[node name="HoverUV_property" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/HoverUV_HBox" unique_id=790959556 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "cursor_picker.hover_data.uv"
+clamped_decimals = 1
+
+[node name="LatLong_HBox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=1806433264]
+layout_mode = 2
+
+[node name="LatLong_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/LatLong_HBox" unique_id=1455579885]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Lat Long: "
+
+[node name="LatLong_property_lat" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/LatLong_HBox" unique_id=757784475 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "cursor_picker.hover_data.latitude_deg"
+clamped_decimals = 1
+
+[node name="LatLong_property_long" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/LatLong_HBox" unique_id=537125859 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "cursor_picker.hover_data.longitude_deg"
+clamped_decimals = 1
+
+[node name="ElapsedDays_HBox" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=70995900]
+layout_mode = 2
+
+[node name="EDays_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedDays_HBox" unique_id=1433376800]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Days: "
+
+[node name="EDays_days" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedDays_HBox" unique_id=2044783310 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "elapsed_days"
+
+[node name="EDays_dayProgress" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedDays_HBox" unique_id=2035848694 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "day_progress"
+clamped_decimals = 2
+
+[node name="ElapsedYears_HBox2" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry" unique_id=1625568211]
+layout_mode = 2
+
+[node name="EYears_label" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedYears_HBox2" unique_id=1358929093]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Years: "
+
+[node name="EYears_years" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedYears_HBox2" unique_id=1472293746 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "elapsed_years"
+
+[node name="EYEars_yearProgress" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/Telemetry/ElapsedYears_HBox2" unique_id=1197184308 node_paths=PackedStringArray("target")]
+layout_mode = 2
+size_flags_vertical = 1
+text = "no value"
+script = ExtResource("3_ryvqp")
+target = NodePath("../../../../../../GameStateManager")
+config_property = "year_progress"
+clamped_decimals = 2
+
+[node name="DebugLayers" type="VBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=348878446]
+layout_mode = 2
+
+[node name="RedChannelMapping" type="OptionButton" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/DebugLayers" unique_id=922092728]
+layout_mode = 2
+
+[node name="GreenChannelMapping" type="OptionButton" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/DebugLayers" unique_id=1353986309]
+layout_mode = 2
+
+[node name="BlueChannelMapping" type="OptionButton" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/DebugLayers" unique_id=1198735993]
+layout_mode = 2
+
+[node name="LayerUIScript" type="Node" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/DebugLayers" unique_id=825178621 node_paths=PackedStringArray("sphere_visualiser", "menu_r", "menu_g", "menu_b")]
+script = ExtResource("5_vwb56")
+sphere_visualiser = NodePath("../../../TabContainer/World/SubViewport/root/World")
+menu_r = NodePath("../RedChannelMapping")
+menu_g = NodePath("../GreenChannelMapping")
+menu_b = NodePath("../BlueChannelMapping")
+
+[node name="ChroniclePanel" type="PanelContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel" unique_id=-1153374643]
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("7_chron")
+
+[node name="ChronicleVBox" type="VBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/ChroniclePanel" unique_id=187149282]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/ChroniclePanel/ChronicleVBox" unique_id=1768184068]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/ChroniclePanel/ChronicleVBox/Header" unique_id=1331479317]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Chronicle"
+
+[node name="ImpactScore" type="Label" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/ChroniclePanel/ChronicleVBox/Header" unique_id=377959328]
+layout_mode = 2
+text = "Impact: 0"
+
+[node name="LogText" type="RichTextLabel" parent="ScrollContainer/GpuSched_DebugPanel/DebugPanel/ChroniclePanel/ChronicleVBox" unique_id=1203435468]
+custom_minimum_size = Vector2(260, 160)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 12
+scroll_following = true
+
+[node name="TabContainer" type="TabContainer" parent="ScrollContainer/GpuSched_DebugPanel" unique_id=1763294880]
+layout_mode = 2
+size_flags_horizontal = 3
+current_tab = 2
+
+[node name="FloatLayers" type="GridContainer" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer" unique_id=2043253021]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 2
+metadata/_tab_index = 0
+
+[node name="AtomicLayers" type="GridContainer" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer" unique_id=1262177424]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 2
+metadata/_tab_index = 1
+
+[node name="World" type="SubViewportContainer" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer" unique_id=1219142370]
+layout_mode = 2
+stretch = true
+metadata/_tab_index = 2
+
+[node name="SubViewport" type="SubViewport" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer/World" unique_id=1888333155]
+handle_input_locally = false
+size = Vector2i(1656, 1049)
+render_target_update_mode = 4
+
+[node name="root" type="Node3D" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport" unique_id=629261352]
+
+[node name="World" type="MeshInstance3D" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport/root" unique_id=149029011 node_paths=PackedStringArray("game_state_manager", "sun_light")]
+mesh = ExtResource("4_xoy7y")
+surface_material_override/0 = SubResource("ShaderMaterial_013od")
+script = ExtResource("6_ryvqp")
+game_state_manager = NodePath("../../../../../../../GameStateManager")
+sun_light = NodePath("../DirectionalLight3D")
+base_smooth_noise = SubResource("FastNoiseLite_013od")
+base_ridge_noise = SubResource("FastNoiseLite_wakpg")
+
+[node name="Camera3D" type="Camera3D" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport/root/World" unique_id=308164800 node_paths=PackedStringArray("target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.75)
+environment = SubResource("Environment_xoy7y")
+attributes = SubResource("CameraAttributesPractical_n33li")
+script = ExtResource("8_wakpg")
+target = NodePath("..")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport/root" unique_id=1930202788]
+transform = Transform3D(0.62442505, 0, 0.7810848, 0, 1, 0, -0.7810848, 0, 0.62442505, 0, 0, 2.0296574)
+directional_shadow_mode = 0
+sky_mode = 1
+
+[node name="GameStateManager" type="Node" parent="." unique_id=1565285443 node_paths=PackedStringArray("world", "camera")]
+script = ExtResource("6_n33li")
+world = NodePath("../ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport/root/World")
+camera = NodePath("../ScrollContainer/GpuSched_DebugPanel/TabContainer/World/SubViewport/root/World/Camera3D")
+
+[node name="DebugSpellSelector" type="Node" parent="." unique_id=-1729681852]
+script = ExtResource("10_spellsel")
+
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/GenerateWorld" to="GameStateManager" method="generate_world"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/StartSim" to="GameStateManager" method="start_simulation"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/StopSim" to="GameStateManager" method="stop_simulation"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer/Pause" to="GameStateManager" method="pause_sim_speed"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer/SlowSim" to="GameStateManager" method="decrease_sim_speed"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer/FastSim" to="GameStateManager" method="increase_sim_speed"]
+[connection signal="button_down" from="ScrollContainer/GpuSched_DebugPanel/DebugPanel/HBoxContainer/Fastest" to="GameStateManager" method="max_sim_speed"]

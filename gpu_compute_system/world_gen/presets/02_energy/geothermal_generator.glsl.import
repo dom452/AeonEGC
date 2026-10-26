@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://rx73b57u7fyl"
+path="res://.godot/imported/geothermal_generator.glsl-3222faf84e4efd76045a214e9e26cef2.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/02_energy/geothermal_generator.glsl"
+dest_files=["res://.godot/imported/geothermal_generator.glsl-3222faf84e4efd76045a214e9e26cef2.res"]
+
+[params]
+

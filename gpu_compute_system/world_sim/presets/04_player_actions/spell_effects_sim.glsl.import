@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://grk1p88hx5sx"
+path="res://.godot/imported/spell_effects_sim.glsl-865d38fa5e2e0f800fe014f12093be39.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/04_player_actions/spell_effects_sim.glsl"
+dest_files=["res://.godot/imported/spell_effects_sim.glsl-865d38fa5e2e0f800fe014f12093be39.res"]
+
+[params]
+

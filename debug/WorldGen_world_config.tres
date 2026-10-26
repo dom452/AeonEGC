@@ -1,0 +1,46 @@
+[gd_resource type="Resource" script_class="WorldConfig" format=3 uid="uid://p4kta36gfome"]
+
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="1_4u51l"]
+[ext_resource type="Resource" uid="uid://b30kjhlxw61ii" path="res://gpu_compute_system/world_gen/presets/00_landscape/gen_landmass_height.tres" id="2_4kbho"]
+[ext_resource type="Resource" uid="uid://dsd0maqpgt0qk" path="res://gpu_compute_system/world_gen/presets/00_landscape/gen_landmass_slopes.tres" id="3_b63ys"]
+[ext_resource type="Resource" uid="uid://bd4ssrovuau2w" path="res://gpu_compute_system/world_gen/presets/00_landscape/gen_landmass_sediment.tres" id="4_7w4bs"]
+[ext_resource type="Resource" uid="uid://c1j3p08qntr5h" path="res://gpu_compute_system/world_gen/presets/02_energy/gen_sunlight.tres" id="5_214s8"]
+[ext_resource type="Resource" uid="uid://bfxy45wqlawph" path="res://gpu_compute_system/world_gen/presets/02_energy/gen_geothermal.tres" id="6_qwb1n"]
+[ext_resource type="Resource" uid="uid://dqqfr71yfgkx0" path="res://gpu_compute_system/world_gen/presets/03_heat/gen_ground_heat.tres" id="7_qjx4j"]
+[ext_resource type="Resource" uid="uid://b8x4p2s7oak1m" path="res://gpu_compute_system/world_gen/presets/06_atmosphere/gen_pressure.tres" id="8b_press"]
+[ext_resource type="Resource" uid="uid://b80p5x0r6d280" path="res://gpu_compute_system/world_gen/presets/03_heat/gen_air_temp.tres" id="8_g56ua"]
+[ext_resource type="Resource" uid="uid://galg5n0bpts5" path="res://gpu_compute_system/world_gen/presets/01_water/gen_water_base.tres" id="9_olyyq"]
+[ext_resource type="Resource" uid="uid://hfgo1h807etw" path="res://gpu_compute_system/world_gen/presets/01_water/gen_water_flow.tres" id="10_0h7nu"]
+[ext_resource type="Resource" uid="uid://0drv2dvwe401" path="res://gpu_compute_system/world_gen/presets/01_water/gen_ice_seeding.tres" id="11_siw64"]
+[ext_resource type="Resource" uid="uid://c27bh1e7vvjc2" path="res://gpu_compute_system/world_gen/presets/01_water/gen_ice_freezing.tres" id="12_632kj"]
+[ext_resource type="Resource" uid="uid://dio4fey0aqq0o" path="res://gpu_compute_system/world_gen/presets/03_heat/gen_temp_rebalance_ice.tres" id="13_k04r5"]
+[ext_resource type="Resource" uid="uid://0nkk0hlcrou6" path="res://gpu_compute_system/world_gen/presets/04_thermodynamics/gen_thermodynamics.tres" id="14_3rm1y"]
+[ext_resource type="Script" uid="uid://coxfvp46uufx4" path="res://core/world_config.gd" id="15_604oa"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="16_4fokt"]
+[ext_resource type="Resource" uid="uid://g0ma0ik53kr5" path="res://gpu_compute_system/world_gen/debug/atomic_visualizer_gen.tres" id="17_0lkko"]
+[ext_resource type="Resource" uid="uid://bgk4dbv47mg55" path="res://gpu_compute_system/world_sim/presets/00_solar/solar_insolation_sim.tres" id="17_mqss6"]
+[ext_resource type="Resource" uid="uid://cukxflvq5qy0a" path="res://gpu_compute_system/world_sim/presets/01_thermodynamics/thermodynamics_sim.tres" id="18_2g3ko"]
+[ext_resource type="Resource" uid="uid://bswe0atm0001s" path="res://gpu_compute_system/world_sim/presets/02_fluids/swe_atmosphere_sim.tres" id="19_mi8ef"]
+[ext_resource type="Resource" uid="uid://8ld117hobwbj" path="res://gpu_compute_system/world_sim/presets/02_fluids/hydraulic_flow_sim.tres" id="20_dgoox"]
+[ext_resource type="Resource" uid="uid://pnvqbq125wmm" path="res://gpu_compute_system/world_sim/presets/03_ecology/flora_ecology_sim.tres" id="21_flora"]
+[ext_resource type="Resource" uid="uid://cl8a2cqyin1cp" path="res://gpu_compute_system/world_gen/presets/05_flora/gen_flora_seeding.tres" id="22_flora_gen"]
+[ext_resource type="Resource" uid="uid://c76khbuh46mm4" path="res://gpu_compute_system/world_sim/presets/04_player_actions/player_actions_sim.tres" id="25_qjx4j"]
+[ext_resource type="Resource" uid="uid://by7kg4gsrn4mf" path="res://gpu_compute_system/world_sim/debug/atomic_visualizer_sim.tres" id="26_kpjpv"]
+[ext_resource type="Resource" uid="uid://mjqhtbg2vq6i" path="res://gpu_compute_system/world_gen/presets/07_coarse/coarse_pressure_generator.tres" id="27_cpress"]
+[ext_resource type="Resource" uid="uid://bytysu616odba" path="res://gpu_compute_system/world_sim/presets/05_coarse/fine_to_coarse_downsample.tres" id="28_cdown"]
+[ext_resource type="Resource" uid="uid://c2bsbhfpccc85" path="res://gpu_compute_system/world_sim/presets/05_coarse/coarse_swe_sim.tres" id="29_cswe"]
+[ext_resource type="Resource" uid="uid://sspellfxsim1" path="res://gpu_compute_system/world_sim/presets/04_player_actions/spell_effects_sim.tres" id="30_spelfx"]
+[ext_resource type="Resource" uid="uid://ba0ulhend2e3c" path="res://gpu_compute_system/world_gen/presets/06_classification/gen_biome_seeding.tres" id="32_bseed"]
+[ext_resource type="Resource" uid="uid://dq6rx2o6t2qjb" path="res://gpu_compute_system/world_sim/presets/06_classification/biome_classifier_sim.tres" id="33_bclass"]
+
+[resource]
+script = ExtResource("15_604oa")
+chunk_resolution = 64
+chunk_grid_x = 8
+chunk_grid_y = 8
+sim_layers = Array[ExtResource("16_4fokt")]([ExtResource("17_mqss6"), ExtResource("18_2g3ko"), ExtResource("20_dgoox"), ExtResource("28_cdown"), ExtResource("29_cswe"), ExtResource("19_mi8ef"), ExtResource("21_flora"), ExtResource("33_bclass"), ExtResource("25_qjx4j"), ExtResource("30_spelfx"), ExtResource("26_kpjpv")])
+layer_generators = Array[ExtResource("1_4u51l")]([ExtResource("2_4kbho"), ExtResource("3_b63ys"), ExtResource("4_7w4bs"), ExtResource("5_214s8"), ExtResource("6_qwb1n"), ExtResource("7_qjx4j"), ExtResource("8_g56ua"), ExtResource("8b_press"), ExtResource("9_olyyq"), ExtResource("10_0h7nu"), ExtResource("11_siw64"), ExtResource("12_632kj"), ExtResource("13_k04r5"), ExtResource("14_3rm1y"), ExtResource("27_cpress"), ExtResource("22_flora_gen"), ExtResource("32_bseed"), ExtResource("17_0lkko")])
+coriolis_strength = 1.0
+sea_level_ratio = 0.003
+world_seed = 3
+metadata/_custom_type_script = "uid://coxfvp46uufx4"

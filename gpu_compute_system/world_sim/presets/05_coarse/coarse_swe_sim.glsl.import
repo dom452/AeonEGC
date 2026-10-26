@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dqlxaw51cd8w6"
+path="res://.godot/imported/coarse_swe_sim.glsl-a38a29a95fba72ebbd3caf72b43e14dc.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/05_coarse/coarse_swe_sim.glsl"
+dest_files=["res://.godot/imported/coarse_swe_sim.glsl-a38a29a95fba72ebbd3caf72b43e14dc.res"]
+
+[params]
+

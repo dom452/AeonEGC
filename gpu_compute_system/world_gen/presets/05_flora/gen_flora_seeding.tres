@@ -1,0 +1,103 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://cl8a2cqyin1cp"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_tkwfy"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_push_config"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_gen_class"]
+[ext_resource type="RDShaderFile" uid="uid://hcfm6ugmmwrw" path="res://gpu_compute_system/world_gen/presets/05_flora/flora_seeding_generator.glsl" id="4_shader"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="5_pconstant"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="6_pconstant_atomic"]
+
+[sub_resource type="Resource" id="Resource_growth_rate_mod"]
+script = ExtResource("5_pconstant")
+target_domain = 4
+name = &"FLORA.GROWTH_RATE_MODIFIER"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ground_temp"]
+script = ExtResource("5_pconstant")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_air_temp"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_humidity"]
+script = ExtResource("5_pconstant")
+target_domain = 3
+target_sub_layer_index = 3
+name = &"ATMOSPHERE.HUMIDITY"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_sunlight"]
+script = ExtResource("5_pconstant")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_liquid_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_ice_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_a_grasses"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+name = &"FLORA.ATOMIC.GRASSES"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_a_nutrients"]
+script = ExtResource("6_pconstant_atomic")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.ATOMIC.SOIL_NUTRIENTS"
+value = null
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Resource_flora_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "flora_atomic_multiplier"
+config_property = "flora_atomic_multiplier"
+name = &"flora_atomic_multiplier"
+value = 1000000.0
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[sub_resource type="Resource" id="Resource_seed_amount"]
+script = ExtResource("1_push_const")
+name = &"seed_amount"
+value = 1.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_gen_class")
+system_name = 3
+shader_resource = ExtResource("4_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Resource_growth_rate_mod"), SubResource("Resource_ground_temp"), SubResource("Resource_air_temp"), SubResource("Resource_humidity"), SubResource("Resource_sunlight"), SubResource("Resource_liquid_height"), SubResource("Resource_ice_height"), SubResource("Resource_a_grasses"), SubResource("Resource_a_nutrients"), SubResource("Resource_flora_atomic_mult"), SubResource("Resource_atomic_mult"), SubResource("Resource_seed_amount")])

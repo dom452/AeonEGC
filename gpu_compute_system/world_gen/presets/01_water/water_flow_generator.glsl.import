@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cje2qtwcrw4tw"
+path="res://.godot/imported/water_flow_generator.glsl-9399c625d870dd28d38f355b52cd2116.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/01_water/water_flow_generator.glsl"
+dest_files=["res://.godot/imported/water_flow_generator.glsl-9399c625d870dd28d38f355b52cd2116.res"]
+
+[params]
+

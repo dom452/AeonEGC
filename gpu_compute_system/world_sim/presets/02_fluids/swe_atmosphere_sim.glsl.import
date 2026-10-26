@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://b1iyoqd41air3"
+path="res://.godot/imported/swe_atmosphere_sim.glsl-b8dd5929ded18f0f652eae92c3344e0b.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/02_fluids/swe_atmosphere_sim.glsl"
+dest_files=["res://.godot/imported/swe_atmosphere_sim.glsl-b8dd5929ded18f0f652eae92c3344e0b.res"]
+
+[params]
+

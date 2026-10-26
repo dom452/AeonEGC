@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cq2deh3ghuxc"
+path="res://.godot/imported/pressure_generator.glsl-da6e326206ad2832ae133959ea7e234d.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/06_atmosphere/pressure_generator.glsl"
+dest_files=["res://.godot/imported/pressure_generator.glsl-da6e326206ad2832ae133959ea7e234d.res"]
+
+[params]
+

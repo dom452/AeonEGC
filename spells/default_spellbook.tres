@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="SpellbookManager" format=3 uid="uid://bspellbook01"]
+
+[ext_resource type="Script" path="res://spells/spellbook_manager.gd" id="1_sbm"]
+[ext_resource type="Script" uid="uid://cj8jfhufuvjmm" path="res://spells/player_spell.gd" id="2_1nrjr"]
+[ext_resource type="Resource" uid="uid://bspellgeovent" path="res://spells/geothermal_vent_spell.tres" id="2_vent"]
+
+[resource]
+script = ExtResource("1_sbm")

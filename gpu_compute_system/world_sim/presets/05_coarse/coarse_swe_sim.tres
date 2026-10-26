@@ -1,0 +1,123 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://c2bsbhfpccc85"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_pc"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="2_ls"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_wc"]
+[ext_resource type="Script" uid="uid://b66f7giycuqcj" path="res://gpu_compute_system/common/push_constant_sim_layer_coarse.gd" id="4_slc"]
+[ext_resource type="RDShaderFile" uid="uid://dqlxaw51cd8w6" path="res://gpu_compute_system/world_sim/presets/05_coarse/coarse_swe_sim.glsl" id="5_shdr"]
+
+[sub_resource type="Resource" id="Resource_c_h_upper"]
+script = ExtResource("4_slc")
+name = &"COARSE.H_UPPER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_upper_x"]
+script = ExtResource("4_slc")
+target_coarse_layer = 1
+name = &"COARSE.WIND_UPPER_X"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_upper_y"]
+script = ExtResource("4_slc")
+target_coarse_layer = 2
+name = &"COARSE.WIND_UPPER_Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_h_lower"]
+script = ExtResource("4_slc")
+target_coarse_layer = 3
+name = &"COARSE.H_LOWER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_x"]
+script = ExtResource("4_slc")
+target_coarse_layer = 4
+name = &"COARSE.WIND_LOWER_X"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_y"]
+script = ExtResource("4_slc")
+target_coarse_layer = 5
+name = &"COARSE.WIND_LOWER_Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_air_temp"]
+script = ExtResource("4_slc")
+target_coarse_layer = 6
+name = &"COARSE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_terrain"]
+script = ExtResource("4_slc")
+target_coarse_layer = 7
+name = &"COARSE.TERRAIN"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_roughness"]
+script = ExtResource("4_slc")
+target_coarse_layer = 8
+name = &"COARSE.ROUGHNESS"
+value = null
+
+[sub_resource type="Resource" id="Resource_swe_gravity"]
+script = ExtResource("3_wc")
+config_property = "coarse_swe_gravity"
+config_property = "coarse_swe_gravity"
+name = &"coarse_swe_gravity"
+value = 5.0
+
+[sub_resource type="Resource" id="Resource_coriolis"]
+script = ExtResource("3_wc")
+config_property = "coriolis_strength"
+config_property = "coriolis_strength"
+name = &"coriolis_strength"
+value = 1.0
+
+[sub_resource type="Resource" id="Resource_thermal_alpha"]
+script = ExtResource("3_wc")
+config_property = "swe_thermal_alpha"
+config_property = "swe_thermal_alpha"
+name = &"swe_thermal_alpha"
+value = 0.05
+
+[sub_resource type="Resource" id="Resource_global_mean_temp"]
+script = ExtResource("3_wc")
+config_property = "swe_global_mean_temp"
+config_property = "swe_global_mean_temp"
+name = &"swe_global_mean_temp"
+value = 15.0
+
+[sub_resource type="Resource" id="Resource_wind_friction"]
+script = ExtResource("3_wc")
+config_property = "swe_wind_friction"
+config_property = "swe_wind_friction"
+name = &"swe_wind_friction"
+value = 0.2
+
+[sub_resource type="Resource" id="Resource_relax_strength"]
+script = ExtResource("3_wc")
+config_property = "coarse_swe_relax_strength"
+config_property = "coarse_swe_relax_strength"
+name = &"coarse_swe_relax_strength"
+value = 25.0
+
+[sub_resource type="Resource" id="Resource_orographic_drag"]
+script = ExtResource("3_wc")
+config_property = "coarse_orographic_drag"
+config_property = "coarse_orographic_drag"
+name = &"coarse_orographic_drag"
+value = 0.5
+
+[sub_resource type="Resource" id="Resource_density_ratio"]
+script = ExtResource("3_wc")
+config_property = "coarse_density_ratio"
+config_property = "coarse_density_ratio"
+name = &"coarse_density_ratio"
+value = 0.7
+
+[resource]
+script = ExtResource("2_ls")
+system_name = 2
+shader_resource = ExtResource("5_shdr")
+is_coarse = true
+push_constants_resources = Array[ExtResource("1_pc")]([SubResource("Resource_c_h_upper"), SubResource("Resource_c_wind_upper_x"), SubResource("Resource_c_wind_upper_y"), SubResource("Resource_c_h_lower"), SubResource("Resource_c_wind_lower_x"), SubResource("Resource_c_wind_lower_y"), SubResource("Resource_c_air_temp"), SubResource("Resource_c_terrain"), SubResource("Resource_c_roughness"), SubResource("Resource_swe_gravity"), SubResource("Resource_coriolis"), SubResource("Resource_thermal_alpha"), SubResource("Resource_global_mean_temp"), SubResource("Resource_wind_friction"), SubResource("Resource_relax_strength"), SubResource("Resource_orographic_drag"), SubResource("Resource_density_ratio")])

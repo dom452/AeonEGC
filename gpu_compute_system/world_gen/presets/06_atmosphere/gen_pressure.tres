@@ -1,0 +1,68 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://b8x4p2s7oak1m"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="4_g4ar4"]
+[ext_resource type="RDShaderFile" uid="uid://cq2deh3ghuxc" path="res://gpu_compute_system/world_gen/presets/06_atmosphere/pressure_generator.glsl" id="4_shdr"]
+
+[sub_resource type="Resource" id="Resource_pressure_write"]
+script = ExtResource("4_g4ar4")
+target_domain = 3
+target_sub_layer_index = 6
+name = &"ATMOSPHERE.PRESSURE"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_bedrock"]
+script = ExtResource("4_g4ar4")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_air_temp_read"]
+script = ExtResource("4_g4ar4")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_base_press"]
+script = ExtResource("3_pcfg")
+config_property = "base_pressure_sea_level"
+config_property = "base_pressure_sea_level"
+name = &"base_pressure_sea_level"
+value = 0.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_lat_amp"]
+script = ExtResource("3_pcfg")
+config_property = "latitude_pressure_amp"
+config_property = "latitude_pressure_amp"
+name = &"latitude_pressure_amp"
+value = 0.08
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_alt_lapse"]
+script = ExtResource("3_pcfg")
+config_property = "altitude_lapse_rate"
+config_property = "altitude_lapse_rate"
+name = &"altitude_lapse_rate"
+value = 0.00012
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_therm_coef"]
+script = ExtResource("3_pcfg")
+config_property = "thermal_pressure_coef"
+config_property = "thermal_pressure_coef"
+name = &"thermal_pressure_coef"
+value = -0.003
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 2
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_pressure_write"), SubResource("Resource_bedrock"), SubResource("Resource_air_temp_read"), SubResource("Resource_base_press"), SubResource("Resource_lat_amp"), SubResource("Resource_alt_lapse"), SubResource("Resource_therm_coef")])

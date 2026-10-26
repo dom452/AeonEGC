@@ -1,0 +1,182 @@
+class_name VisHelpers
+extends RefCounted
+
+## Analyzes the physical parameters defined in WorldConfig and maps them to the expected visualization ranges
+## Returns Vector2(min_expected_value, max_expected_value)
+##
+## UNIT REFERENCE (from helpers.gd forensic analysis):
+##   Height-Units (BEDROCK, SEDIMENT, WATER_LIQUID/ICE): 1.0 = 100 meters (hectometers)
+##   Temperature (GROUND_TEMP, WATER_TEMP, AIR_TEMP): Degrees Celsius (°C)
+##   Flora biomass: Dimensionless [0, K] where K is carrying capacity (grass≤1, shrub≤3, tree≤5, aquatic≤2)
+##   Wind: SWE horizontal velocity (grid-cells/frame), terrain-aware
+##   Pressure: SWE column height h (pressure ∝ g*h); h ≈ 1.0 at rest
+##   Humidity/Rain/Snow: Normalized ratios
+##   Sunlight: Lambertian insolation [0, 1]
+##
+## NOTE: Grid cell area is NOT 100m×100m. Default Earth config gives ~78 km/cell.
+##       Water values are DEPTH units, not volume (GL).
+static func get_layer_min_max(absolute_layer_index: int, is_atomic: bool = false) -> Vector2:
+	# Reverse engineer the sim_layer and sub_layer from the absolute grid index
+	var found_layer : Helpers.sim_layers = Helpers.sim_layers.INVALID
+	var found_sub_layer : int = -1
+	
+	var target_map : Dictionary = GameStateManager.atomic_layer_to_indices_map if is_atomic else GameStateManager.float_layer_to_indices_map
+	
+	for sim_layer : Helpers.sim_layers in target_map.keys():
+		var indices : PackedInt32Array = target_map[sim_layer]
+		var idx_pos : int = indices.find(absolute_layer_index)
+		if idx_pos != -1:
+			found_layer = sim_layer
+			found_sub_layer = idx_pos
+			break
+			
+	var min_val : float = 0.0
+	var max_val : float = 1.0
+	
+	var wc : WorldConfig = GameStateManager.world_config
+	var p_temp : float = wc.pole_temp if wc else -30.0
+	var e_temp : float = wc.equator_temp if wc else 40.0
+	var min_temp : float = min(p_temp, e_temp)
+	var max_temp : float = max(p_temp, e_temp)
+	
+	# min_temp = -5.0
+	# max_temp = 20.0
+	
+	if is_atomic:
+		match found_layer:
+			Helpers.sim_layers.WATER:
+				match found_sub_layer:
+					0: # LIQUID_VOLUME
+						max_val = wc.max_elevation if wc else 200.0
+					1: # ICE_VOLUME
+						max_val = wc.thermal_ice_influence * 2.0 if wc else 0.1
+			Helpers.sim_layers.FLORA:
+				match found_sub_layer:
+					0: # GRASSES
+						max_val = 1.0 # K_grass base
+					1: # SHRUBS
+						max_val = 3.0 # K_shrub base
+					2: # TREES_CANOPY
+						max_val = 5.0 # K_tree base
+					3: # AQUATIC
+						max_val = 2.0 # K_aquatic base
+					4: # FLORA_DETRITUS
+						max_val = 1.0
+			Helpers.sim_layers.LANDSCAPE:
+				match found_sub_layer:
+					1: # SOIL_NUTRIENTS
+						max_val = 5.0
+					3: # BIOME_TYPE — packed ID (low byte) + attribution bits. Categorical:
+						# visualizers decode the ID byte (÷255), never the raw texel.
+						max_val = float(Helpers.BIOME_UNCLASSIFIED)
+	else:
+		match found_layer:
+			Helpers.sim_layers.LANDSCAPE:
+				match found_sub_layer:
+					0: # BEDROCK_HEIGHT
+						max_val = wc.max_elevation if wc else 200.0
+					3: # SEDIMENT_HEIGHT
+						max_val = wc.max_sediment_depth if wc else 1.0
+					1, 2: # SLOPE.X, SLOPE.Y
+						min_val = -1.0
+						max_val = 1.0
+					4: # GROUND_TEMP
+						min_val = min_temp
+						max_val = max_temp
+			Helpers.sim_layers.WATER:
+				match found_sub_layer:
+					0: # WATER_LIQUID_HEIGHT
+						# All water on the map pools in valleys, meaning deep oceans can far exceed the base sea level threshold.
+						max_val = wc.max_elevation if wc else 200.0
+					1: # WATER_ICE_HEIGHT
+						max_val = wc.thermal_ice_influence * 2.0 if wc else 0.1 # Visualize up to 2x the thermal threshold cap
+					2, 3: # NET_VELOCITY.X, Y
+						var max_flow : float = wc.max_flow_rate if wc else 1.0
+						min_val = -max_flow
+						max_val = max_flow
+					4: # DIVERGENCE
+						var max_flow : float = wc.max_flow_rate if wc else 1.0
+						min_val = -max_flow
+						max_val = max_flow
+					5: # TURBULENCE
+						var max_flow : float = wc.max_flow_rate if wc else 1.0
+						min_val = 0.0
+						max_val = max_flow
+					6: # WATER_TEMP
+						min_val = min_temp
+						max_val = max_temp
+			Helpers.sim_layers.ENERGY:
+				match found_sub_layer:
+					0: # SUNLIGHT
+						max_val = 1.0
+					1: # TIDAL_FORCE
+						min_val = -1.0
+						max_val = 1.0
+			Helpers.sim_layers.ATMOSPHERE:
+				match found_sub_layer:
+					0, 1: # WIND.X, Y — SWE horizontal velocity
+						# SWE velocity = hu/h. With h~2-4 and strong pressure gradients,
+						# velocities can exceed ±1.0. Range [-2, 2] gives full headroom.
+						min_val = -2.0
+						max_val = 2.0 
+					2: # AIR_TEMP
+						min_val = min_temp
+						max_val = max_temp
+					3, 4, 5: # HUMIDITY, RAIN, SNOW
+						max_val = 1.0
+					6: # PRESSURE — SWE column height h (pressure ∝ g*h)
+					# h ≈ 1.0 at rest. Thermal + water cycle can push to ~2-3 at poles.
+					# Range [0, 4] gives headroom so poles show bright but don't clip to white.
+						min_val = 0.0
+						max_val = 3.0
+			Helpers.sim_layers.FLORA:
+				match found_sub_layer:
+					0, 1: # GROWTH_RATE_MODIFIER, CANOPY_SHADE
+						max_val = 1.0
+						
+	return Vector2(min_val, max_val)
+
+static func get_scale_for_layer(absolute_layer_index: int, is_atomic: bool = false) -> float:
+	var bounds : Vector2 = get_layer_min_max(absolute_layer_index, is_atomic)
+	var range_val : float = bounds.y - bounds.x
+	if range_val == 0.0: return 1.0
+	return 1.0 / range_val
+
+static func get_offset_for_layer(absolute_layer_index: int, is_atomic: bool = false) -> float:
+	var bounds : Vector2 = get_layer_min_max(absolute_layer_index, is_atomic)
+	return -bounds.x
+
+static func get_coarse_layer_min_max(coarse_layer_idx: int) -> Vector2:
+	var wc : WorldConfig = GameStateManager.world_config
+	var p_temp : float = wc.pole_temp if wc else -30.0
+	var e_temp : float = wc.equator_temp if wc else 40.0
+	var min_temp : float = min(p_temp, e_temp)
+	var max_temp : float = max(p_temp, e_temp)
+	var max_elev : float = wc.max_elevation if wc else 200.0
+
+	match coarse_layer_idx:
+		Helpers.coarse_layers.H_UPPER:
+			return Vector2(0.0, 2.0)
+		Helpers.coarse_layers.WIND_UPPER_X, Helpers.coarse_layers.WIND_UPPER_Y:
+			return Vector2(-3.0, 3.0)
+		Helpers.coarse_layers.H_LOWER:
+			return Vector2(0.0, 2.0)
+		Helpers.coarse_layers.WIND_LOWER_X, Helpers.coarse_layers.WIND_LOWER_Y:
+			return Vector2(-2.0, 2.0)
+		Helpers.coarse_layers.AIR_TEMP:
+			return Vector2(min_temp, max_temp)
+		Helpers.coarse_layers.TERRAIN:
+			return Vector2(0.0, max_elev)
+		Helpers.coarse_layers.ROUGHNESS:
+			return Vector2(0.0, 30.0)
+	return Vector2(0.0, 1.0)
+
+static func get_coarse_scale_for_layer(coarse_layer_idx: int) -> float:
+	var bounds : Vector2 = get_coarse_layer_min_max(coarse_layer_idx)
+	var range_val : float = bounds.y - bounds.x
+	if range_val == 0.0: return 1.0
+	return 1.0 / range_val
+
+static func get_coarse_offset_for_layer(coarse_layer_idx: int) -> float:
+	var bounds : Vector2 = get_coarse_layer_min_max(coarse_layer_idx)
+	return -bounds.x

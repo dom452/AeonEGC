@@ -1,0 +1,91 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://c27bh1e7vvjc2"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="RDShaderFile" uid="uid://cqtwud1dp3wko" path="res://gpu_compute_system/world_gen/presets/01_water/ice_freezing.glsl" id="4_shdr"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="6_pconstant"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="7_pconstant_atomic"]
+
+[sub_resource type="Resource" id="Resource_pconstant_water_liquid_height"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_water_ice_height"]
+script = ExtResource("6_pconstant")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_air_temp"]
+script = ExtResource("6_pconstant")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_ground_temp"]
+script = ExtResource("6_pconstant")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = null
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_pconstant_atomic_liquid"]
+script = ExtResource("7_pconstant_atomic")
+target_domain = 1
+name = &"WATER.ATOMIC.LIQUID_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_pconstant_atomic_ice"]
+script = ExtResource("7_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.ATOMIC.ICE_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_ttemp"]
+script = ExtResource("3_pcfg")
+config_property = "total_freeze_temp"
+config_property = "total_freeze_temp"
+name = &"total_freeze_temp"
+value = -40.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_tcurve"]
+script = ExtResource("3_pcfg")
+config_property = "total_freeze_curve"
+config_property = "total_freeze_curve"
+name = &"total_freeze_curve"
+value = 0.58
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_maxice"]
+script = ExtResource("3_pcfg")
+config_property = "max_ice_thickness"
+config_property = "max_ice_thickness"
+name = &"max_ice_thickness"
+value = 0.04
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_amult"]
+script = ExtResource("3_pcfg")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 1
+is_enabled = false
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_pconstant_water_liquid_height"), SubResource("Resource_pconstant_water_ice_height"), SubResource("Resource_pconstant_air_temp"), SubResource("Resource_pconstant_ground_temp"), SubResource("Resource_pconstant_atomic_liquid"), SubResource("Resource_pconstant_atomic_ice"), SubResource("Resource_ttemp"), SubResource("Resource_tcurve"), SubResource("Resource_maxice"), SubResource("Resource_amult")])

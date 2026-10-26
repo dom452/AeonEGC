@@ -1,0 +1,168 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://8ld117hobwbj"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_push_config"]
+[ext_resource type="RDShaderFile" uid="uid://byeb3v38ogxbw" path="res://gpu_compute_system/world_sim/presets/02_fluids/hydraulic_flow_sim.glsl" id="4_shader"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="5_pconstant"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="5_qnamu"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="6_pconstant_atomic"]
+
+[sub_resource type="Resource" id="Resource_liquid_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+name = &"WATER.WATER_LIQUID_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_ice_height"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.WATER_ICE_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_net_vel_x"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 2
+name = &"WATER.NET_VELOCITY.X"
+value = null
+
+[sub_resource type="Resource" id="Resource_net_vel_y"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 3
+name = &"WATER.NET_VELOCITY.Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_divergence"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 4
+name = &"WATER.DIVERGENCE"
+value = null
+
+[sub_resource type="Resource" id="Resource_turbulence"]
+script = ExtResource("5_pconstant")
+target_domain = 1
+target_sub_layer_index = 5
+name = &"WATER.TURBULENCE"
+value = null
+
+[sub_resource type="Resource" id="Resource_bedrock_height"]
+script = ExtResource("5_pconstant")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_sediment_height"]
+script = ExtResource("5_pconstant")
+target_sub_layer_index = 3
+name = &"LANDSCAPE.SEDIMENT_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_tidal_force"]
+script = ExtResource("5_pconstant")
+target_domain = 2
+target_sub_layer_index = 1
+name = &"ENERGY.TIDAL_FORCE"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_liquid"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+name = &"WATER.ATOMIC.LIQUID_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_ice"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 1
+name = &"WATER.ATOMIC.ICE_VOLUME"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_artesian"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 2
+name = &"WATER.ATOMIC.ARTESIAN_SOURCES"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_salinity"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 1
+target_sub_layer_index = 3
+name = &"WATER.ATOMIC.SALINITY"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_nutrients"]
+script = ExtResource("6_pconstant_atomic")
+target_sub_layer_index = 1
+name = &"LANDSCAPE.ATOMIC.SOIL_NUTRIENTS"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_grasses"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+name = &"FLORA.ATOMIC.GRASSES"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_shrubs"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 1
+name = &"FLORA.ATOMIC.SHRUBS"
+value = null
+
+[sub_resource type="Resource" id="Resource_a_trees"]
+script = ExtResource("6_pconstant_atomic")
+target_domain = 4
+target_sub_layer_index = 2
+name = &"FLORA.ATOMIC.TREES_CANOPY"
+value = null
+
+[sub_resource type="Resource" id="Resource_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+
+[sub_resource type="Resource" id="Resource_flora_atomic_mult"]
+script = ExtResource("2_push_config")
+config_property = "flora_atomic_multiplier"
+config_property = "flora_atomic_multiplier"
+name = &"flora_atomic_multiplier"
+value = 1000000.0
+
+[sub_resource type="Resource" id="Resource_max_flow"]
+script = ExtResource("2_push_config")
+config_property = "max_flow_rate"
+config_property = "max_flow_rate"
+name = &"max_flow_rate"
+value = 1.0
+
+[sub_resource type="Resource" id="Resource_artesian_flow"]
+script = ExtResource("2_push_config")
+config_property = "artesian_flow_rate"
+config_property = "artesian_flow_rate"
+name = &"artesian_flow_rate"
+value = 0.01
+
+[sub_resource type="Resource" id="Resource_nutrient_ero"]
+script = ExtResource("2_push_config")
+config_property = "nutrient_erosion_rate"
+config_property = "nutrient_erosion_rate"
+name = &"nutrient_erosion_rate"
+value = 0.05
+
+[sub_resource type="Resource" id="Resource_tidal_amp"]
+script = ExtResource("2_push_config")
+config_property = "tidal_amplitude"
+config_property = "tidal_amplitude"
+name = &"tidal_amplitude"
+value = 0.05
+
+[resource]
+script = ExtResource("5_qnamu")
+system_name = 2
+shader_resource = ExtResource("4_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Resource_liquid_height"), SubResource("Resource_ice_height"), SubResource("Resource_net_vel_x"), SubResource("Resource_net_vel_y"), SubResource("Resource_divergence"), SubResource("Resource_turbulence"), SubResource("Resource_bedrock_height"), SubResource("Resource_sediment_height"), SubResource("Resource_tidal_force"), SubResource("Resource_a_liquid"), SubResource("Resource_a_ice"), SubResource("Resource_a_artesian"), SubResource("Resource_a_salinity"), SubResource("Resource_a_nutrients"), SubResource("Resource_a_grasses"), SubResource("Resource_a_shrubs"), SubResource("Resource_a_trees"), SubResource("Resource_atomic_mult"), SubResource("Resource_flora_atomic_mult"), SubResource("Resource_max_flow"), SubResource("Resource_artesian_flow"), SubResource("Resource_nutrient_ero"), SubResource("Resource_tidal_amp")])

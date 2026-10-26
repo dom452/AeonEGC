@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dsr71m58mf1ks"
+path="res://.godot/imported/biome_classifier_sim.glsl-5e17c71b13b8af0cc455b28ae82a44cf.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/06_classification/biome_classifier_sim.glsl"
+dest_files=["res://.godot/imported/biome_classifier_sim.glsl-5e17c71b13b8af0cc455b28ae82a44cf.res"]
+
+[params]
+

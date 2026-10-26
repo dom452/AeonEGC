@@ -1,0 +1,108 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://mjqhtbg2vq6i"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_n8fs1"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_pc"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="2_lg"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_wc"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="4_sl"]
+[ext_resource type="Script" uid="uid://b66f7giycuqcj" path="res://gpu_compute_system/common/push_constant_sim_layer_coarse.gd" id="5_slc"]
+[ext_resource type="RDShaderFile" uid="uid://c1vscd0ow55dw" path="res://gpu_compute_system/world_gen/presets/07_coarse/coarse_pressure_generator.glsl" id="6_shdr"]
+
+[sub_resource type="Resource" id="Resource_c_h_upper"]
+script = ExtResource("5_slc")
+name = &"COARSE.H_UPPER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_upper_x"]
+script = ExtResource("5_slc")
+target_coarse_layer = 1
+name = &"COARSE.WIND_UPPER_X"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_upper_y"]
+script = ExtResource("5_slc")
+target_coarse_layer = 2
+name = &"COARSE.WIND_UPPER_Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_h_lower"]
+script = ExtResource("5_slc")
+target_coarse_layer = 3
+name = &"COARSE.H_LOWER"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_x"]
+script = ExtResource("5_slc")
+target_coarse_layer = 4
+name = &"COARSE.WIND_LOWER_X"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_wind_lower_y"]
+script = ExtResource("5_slc")
+target_coarse_layer = 5
+name = &"COARSE.WIND_LOWER_Y"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_air_temp"]
+script = ExtResource("5_slc")
+target_coarse_layer = 6
+name = &"COARSE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_terrain"]
+script = ExtResource("5_slc")
+target_coarse_layer = 7
+name = &"COARSE.TERRAIN"
+value = null
+
+[sub_resource type="Resource" id="Resource_c_roughness"]
+script = ExtResource("5_slc")
+target_coarse_layer = 8
+name = &"COARSE.ROUGHNESS"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_bedrock"]
+script = ExtResource("4_sl")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_sediment"]
+script = ExtResource("4_sl")
+target_sub_layer_index = 3
+name = &"LANDSCAPE.SEDIMENT_HEIGHT"
+value = null
+
+[sub_resource type="Resource" id="Resource_f_air_temp"]
+script = ExtResource("4_sl")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = null
+
+[sub_resource type="Resource" id="Resource_swe_ref_h"]
+script = ExtResource("3_wc")
+config_property = "swe_reference_height"
+config_property = "swe_reference_height"
+name = &"swe_reference_height"
+value = 1.0
+
+[sub_resource type="Resource" id="Resource_lat_amp"]
+script = ExtResource("3_wc")
+config_property = "latitude_pressure_amp"
+config_property = "latitude_pressure_amp"
+name = &"latitude_pressure_amp"
+value = 0.08
+
+[sub_resource type="Resource" id="Resource_alt_lapse"]
+script = ExtResource("3_wc")
+config_property = "altitude_lapse_rate"
+config_property = "altitude_lapse_rate"
+name = &"altitude_lapse_rate"
+value = 0.00012
+
+[resource]
+script = ExtResource("2_lg")
+system_name = 2
+is_coarse = true
+shader_resource = ExtResource("6_shdr")
+push_constants_resources = Array[ExtResource("1_pc")]([SubResource("Resource_c_h_upper"), SubResource("Resource_c_wind_upper_x"), SubResource("Resource_c_wind_upper_y"), SubResource("Resource_c_h_lower"), SubResource("Resource_c_wind_lower_x"), SubResource("Resource_c_wind_lower_y"), SubResource("Resource_c_air_temp"), SubResource("Resource_c_terrain"), SubResource("Resource_c_roughness"), SubResource("Resource_f_bedrock"), SubResource("Resource_f_sediment"), SubResource("Resource_f_air_temp"), SubResource("Resource_swe_ref_h"), SubResource("Resource_lat_amp"), SubResource("Resource_alt_lapse")])

@@ -1,0 +1,290 @@
+#[compute]
+#version 450
+
+// ==========================================
+// WATER FLOW GENERATOR
+// ==========================================
+// Seeds: 
+//   - Modifies existing WATER_LIQUID_HEIGHT (Float Grid)
+//   - Modifies LIQUID_VOLUME (Atomic Grid)
+// Initial Values: 
+//   - Fast-forwards hydraulic erosion and flow, allowing water generated 
+//     by the base generator to pool in basins and oceans.
+// ==========================================
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+// === UNIFIED GENERATOR UNIFORM BINDINGS ===
+// 0: Fine Float Write (r16f) | 1: Fine Float Read (r16f)    | 2: Atomic RW (r32ui)
+// 3: SSBO Write (std430)     | 4: SSBO Read (std430)        | 5: Atomic Visual (r16f)
+// 6: Coarse Float Write (r32f)| 7: Coarse Float Read (r32f) | 15: Custom Noise Read (r32f)
+layout(r16f, set = 0, binding = 0) restrict uniform image2DArray write_tex;
+layout(r16f, set = 0, binding = 1) restrict readonly uniform image2DArray read_tex;
+layout(r32ui, set = 0, binding = 2) uniform uimage2DArray atomic_tex;
+layout(r16f, set = 0, binding = 5) restrict writeonly uniform image2DArray atomic_vis_tex;
+layout(r32f, set = 0, binding = 6) restrict uniform image2DArray coarse_write_tex;
+layout(r32f, set = 0, binding = 7) restrict readonly uniform image2DArray coarse_read_tex;
+layout(r32f, set = 0, binding = 15) restrict readonly uniform image2DArray custom_tex;
+
+layout(push_constant) uniform Params {
+    int f_water_liquid_height;
+    int f_net_velocity_x;
+    int f_net_velocity_y;
+    int f_divergence;
+    int f_turbulence;
+    int f_water_temp;
+    
+    int f_bedrock_height;
+    int f_sediment_height;
+
+    float max_flow_rate;        // Max volumetric water transfer scale (e.g., 15000.0 m³/s).
+    int a_liquid_volume;      // Direct index for LIQUID_VOLUME in the atomic grid
+    int a_salinity;           // WATER atomic layer 3 (SALINITY) — oceanic bootstrap fill
+    float atomic_multiplier;    // Scaling factor for float -> uint atomic conversion
+} params;
+
+// CFL number - MAXIMUM of 0.25 for stability. lower value gives a more viscous substance. 
+const float cfl_cap = 0.25;
+
+// The minimum representable precision limit / cutoff for R16F stability
+const float MINIMUM_EP = 0.0001;
+
+// Precalculated unit vectors for the 4 cardinal neighbours
+const ivec2 NEIGHBOR_OFFSETS[4] = ivec2[](
+ivec2(0, -1), // 0: North
+ivec2(0,  1), // 1: South
+ivec2(1,  0), // 2: East
+ivec2(-1, 0)  // 3: West
+);
+
+// Branchless R16F epsilon quantizer to prevent floating-point twin calculation parity drift
+float get_r16f_epsilon(float value) {
+    float safe_val = max(value, MINIMUM_EP);
+    return max(exp2(floor(log2(safe_val)) - 10.0), MINIMUM_EP);
+}
+
+// === BRANCHLESS SPHERICAL COORDINATE WRAPPING ===
+// Handles continuous 360° cylindrical X-wrapping and 180° polar Y-crossover.
+// Zero branching (no 'if' statements) to prevent warp divergence in GPU execution.
+ivec2 polar_wrap(ivec2 pos, ivec2 size, out float sign_flip) {
+    int W = size.x;
+    int H = size.y;
+    int H2 = 2 * H; // Full Great Circle circumference (360° latitude loop)
+    
+    // 1. Map Y into [0, 2H - 1] via GLSL modulo
+    int y_mod = ((pos.y % H2) + H2) % H2;
+    
+    // 2. Back hemisphere flag: 0 if front hemisphere (Y in 0..H-1), 1 if back hemisphere (Y in H..2H-1)
+    int back = y_mod / H; 
+    
+    // 3. Mirror Y back into [0, H-1] if on the back hemisphere
+    int y_final = (1 - back) * y_mod + back * (H2 - 1 - y_mod);
+    
+    // 4. Offset X by 180° (+W/2) if on the back hemisphere, then wrap X continuously into [0, W-1]
+    int x_final = ((pos.x + back * (W / 2)) % W + W) % W;
+    
+    // 5. Calculate vector directional sign flip (+1.0 for front hemisphere, -1.0 for back hemisphere)
+    sign_flip = 1.0 - 2.0 * float(back);
+    
+    return ivec2(x_final, y_final);
+}
+
+// Helper to get total surface height (land + water)
+float get_surface_height(ivec2 pos, ivec2 size) {
+    float unused_sign;
+    ivec2 wrapped_pos = polar_wrap(pos, size, unused_sign);
+    float land_h = imageLoad(write_tex, ivec3(wrapped_pos, params.f_bedrock_height)).r;
+    float sediment_h = imageLoad(write_tex, ivec3(wrapped_pos, params.f_sediment_height)).r;
+    float water_h = imageLoad(write_tex, ivec3(wrapped_pos, params.f_water_liquid_height)).r;
+    return land_h + sediment_h + water_h;
+}
+
+void get_cell_outflow(ivec2 cell_id, ivec2 size, float flow_factor, float cell_surf, float cell_water, out vec4 out_deltas, out float out_k) {
+    // Model B (cell-centered): poles reside on outer texture boundary edges (y = -0.5, y = size.y - 0.5)
+    float norm_y = (float(cell_id.y) + 0.5) / float(size.y);
+    float latitude = (0.5 - norm_y) * 3.14159265359;
+    float cos_lat = max(cos(latitude), 0.05);
+
+    float n_surf = get_surface_height(cell_id + ivec2(0, -1), size);
+    float s_surf = get_surface_height(cell_id + ivec2(0,  1), size);
+    float e_surf = get_surface_height(cell_id + ivec2(1,  0), size);
+    float w_surf = get_surface_height(cell_id + ivec2(-1, 0), size);
+
+    out_deltas = vec4(
+        max(0.0, cell_surf - n_surf),           // North
+        max(0.0, cell_surf - s_surf),           // South
+        max(0.0, cell_surf - e_surf) * cos_lat, // East (scaled by cell width)
+        max(0.0, cell_surf - w_surf) * cos_lat  // West (scaled by cell width)
+    );
+
+    float total_delta = out_deltas.x + out_deltas.y + out_deltas.z + out_deltas.w;
+    float desired_total = total_delta * flow_factor;
+
+    out_k = min(1.0, cell_water / (desired_total + 1e-8));
+}
+
+void main() {
+    ivec2 id = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(write_tex).xy;
+
+    if (id.x >= size.x || id.y >= size.y) return;
+
+    // Model B (cell-centered): poles reside on outer texture boundary edges (y = -0.5, y = size.y - 0.5)
+    float norm_y = (float(id.y) + 0.5) / float(size.y);
+    float latitude = (0.5 - norm_y) * 3.14159265359;
+    float cos_lat = max(cos(latitude), 0.05);
+
+    float flow_factor = params.max_flow_rate * cfl_cap;
+
+    // Prefetch 5 core cells (Self + 4 Neighbors)
+    // Read Self from Atomic (Absolute Truth)
+    float self_water = float(imageLoad(atomic_tex, ivec3(id, params.a_liquid_volume)).r) / params.atomic_multiplier;
+    float self_temp = imageLoad(write_tex, ivec3(id, params.f_water_temp)).r;
+    float self_land = imageLoad(write_tex, ivec3(id, params.f_bedrock_height)).r + imageLoad(write_tex, ivec3(id, params.f_sediment_height)).r;
+    float self_surf = self_water + self_land;
+
+    // Read Neighbors from Float (Stable Snapshot)
+    float n_sign, s_sign, e_sign, w_sign;
+    ivec2 n_id = polar_wrap(id + ivec2(0, -1), size, n_sign);
+    float n_water = imageLoad(write_tex, ivec3(n_id, params.f_water_liquid_height)).r;
+    float n_temp = imageLoad(write_tex, ivec3(n_id, params.f_water_temp)).r;
+    float n_surf = n_water + imageLoad(write_tex, ivec3(n_id, params.f_bedrock_height)).r + imageLoad(write_tex, ivec3(n_id, params.f_sediment_height)).r;
+
+    ivec2 s_id = polar_wrap(id + ivec2(0,  1), size, s_sign);
+    float s_water = imageLoad(write_tex, ivec3(s_id, params.f_water_liquid_height)).r;
+    float s_temp = imageLoad(write_tex, ivec3(s_id, params.f_water_temp)).r;
+    float s_surf = s_water + imageLoad(write_tex, ivec3(s_id, params.f_bedrock_height)).r + imageLoad(write_tex, ivec3(s_id, params.f_sediment_height)).r;
+
+    ivec2 e_id = polar_wrap(id + ivec2(1,  0), size, e_sign);
+    float e_water = imageLoad(write_tex, ivec3(e_id, params.f_water_liquid_height)).r;
+    float e_temp = imageLoad(write_tex, ivec3(e_id, params.f_water_temp)).r;
+    float e_surf = e_water + imageLoad(write_tex, ivec3(e_id, params.f_bedrock_height)).r + imageLoad(write_tex, ivec3(e_id, params.f_sediment_height)).r;
+
+    ivec2 w_id = polar_wrap(id + ivec2(-1,  0), size, w_sign);
+    float w_water = imageLoad(write_tex, ivec3(w_id, params.f_water_liquid_height)).r;
+    float w_temp = imageLoad(write_tex, ivec3(w_id, params.f_water_temp)).r;
+    float w_surf = w_water + imageLoad(write_tex, ivec3(w_id, params.f_bedrock_height)).r + imageLoad(write_tex, ivec3(w_id, params.f_sediment_height)).r;
+
+    float my_eps = get_r16f_epsilon(self_water);
+    vec4 eps_nsew = vec4(
+        max(my_eps, get_r16f_epsilon(n_water)),
+        max(my_eps, get_r16f_epsilon(s_water)),
+        max(my_eps, get_r16f_epsilon(e_water)),
+        max(my_eps, get_r16f_epsilon(w_water))
+    );
+
+    // 1. SCATTER (How much water am I losing?)
+    vec4 my_deltas = vec4(
+        max(0.0, self_surf - n_surf),
+        max(0.0, self_surf - s_surf),
+        max(0.0, self_surf - e_surf) * cos_lat,
+        max(0.0, self_surf - w_surf) * cos_lat
+    );
+
+    float my_total_delta = my_deltas.x + my_deltas.y + my_deltas.z + my_deltas.w;
+    float my_k = min(1.0, self_water / (my_total_delta * flow_factor + 1e-8));
+
+    vec4 flow_nsew = min(my_deltas * flow_factor * my_k, my_deltas * cfl_cap);
+    flow_nsew = floor(flow_nsew / eps_nsew) * eps_nsew;
+
+    float water_leaving_self = flow_nsew.x + flow_nsew.y + flow_nsew.z + flow_nsew.w;
+
+    // Track thermal mass for temperature advection
+    float thermal_mass = max(0.0, self_water - water_leaving_self) * self_temp;
+
+    // 2. GATHER (How much water am I receiving?)
+    float accumulated_water = 0.0;
+
+    // North Neighbor (i=0) -> gives us South flow (y)
+    {
+        vec4 nb_deltas; float nb_k;
+        get_cell_outflow(n_id, size, flow_factor, n_surf, n_water, nb_deltas, nb_k);
+        float amount = min(nb_deltas.y * flow_factor * nb_k, nb_deltas.y * cfl_cap);
+        float actual_flow = floor(amount / eps_nsew.x) * eps_nsew.x;
+        float dist = min(float(n_id.y), float(size.y - 1 - n_id.y));
+        actual_flow *= smoothstep(0.0, 10.0, dist);
+        accumulated_water += actual_flow;
+        thermal_mass += actual_flow * n_temp;
+    }
+
+    // South Neighbor (i=1) -> gives us North flow (x)
+    {
+        vec4 nb_deltas; float nb_k;
+        get_cell_outflow(s_id, size, flow_factor, s_surf, s_water, nb_deltas, nb_k);
+        float amount = min(nb_deltas.x * flow_factor * nb_k, nb_deltas.x * cfl_cap);
+        float actual_flow = floor(amount / eps_nsew.y) * eps_nsew.y;
+        float dist = min(float(s_id.y), float(size.y - 1 - s_id.y));
+        actual_flow *= smoothstep(0.0, 10.0, dist);
+        accumulated_water += actual_flow;
+        thermal_mass += actual_flow * s_temp;
+    }
+
+    // East Neighbor (i=2) -> gives us West flow (w)
+    {
+        vec4 nb_deltas; float nb_k;
+        get_cell_outflow(e_id, size, flow_factor, e_surf, e_water, nb_deltas, nb_k);
+        float amount = min(nb_deltas.w * flow_factor * nb_k, nb_deltas.w * cfl_cap);
+        float actual_flow = floor(amount / eps_nsew.z) * eps_nsew.z;
+        float dist = min(float(e_id.y), float(size.y - 1 - e_id.y));
+        actual_flow *= smoothstep(0.0, 10.0, dist);
+        accumulated_water += actual_flow;
+        thermal_mass += actual_flow * e_temp;
+    }
+
+    // West Neighbor (i=3) -> gives us East flow (z)
+    {
+        vec4 nb_deltas; float nb_k;
+        get_cell_outflow(w_id, size, flow_factor, w_surf, w_water, nb_deltas, nb_k);
+        float amount = min(nb_deltas.z * flow_factor * nb_k, nb_deltas.z * cfl_cap);
+        float actual_flow = floor(amount / eps_nsew.w) * eps_nsew.w;
+        float dist = min(float(w_id.y), float(size.y - 1 - w_id.y));
+        actual_flow *= smoothstep(0.0, 10.0, dist);
+        accumulated_water += actual_flow;
+        thermal_mass += actual_flow * w_temp;
+    }
+
+    // 3. APPLY
+    float final_water = self_water + accumulated_water - water_leaving_self;
+    float final_temp = final_water > 0.0 ? (thermal_mass / final_water) : 0.0;
+
+    vec2 net_flow = vec2(flow_nsew.z - flow_nsew.w, flow_nsew.y - flow_nsew.x);
+    float divergence = water_leaving_self - accumulated_water; 
+    float turbulence = water_leaving_self + accumulated_water;
+
+// Sync Atomic Grid (Absolute Truth)
+int atomic_delta = int(round((accumulated_water - water_leaving_self) * params.atomic_multiplier));
+if (atomic_delta != 0) {
+    imageAtomicAdd(atomic_tex, ivec3(id, params.a_liquid_volume), uint(atomic_delta));
+}
+
+// Layer 0: WATER_LIQUID_HEIGHT (Float Snapshot)
+imageStore(write_tex, ivec3(id, params.f_water_liquid_height), vec4(max(0.0, final_water), 0.0, 0.0, 0.0));
+
+// Layer 2: Net Velocity X (East - West)
+imageStore(write_tex, ivec3(id, params.f_net_velocity_x), vec4(net_flow.x, 0.0, 0.0, 0.0));
+
+// Layer 2: Net Velocity Y (South - North)
+imageStore(write_tex, ivec3(id, params.f_net_velocity_y), vec4(net_flow.y, 0.0, 0.0, 0.0));
+
+// Layer 3: Divergence
+imageStore(write_tex, ivec3(id, params.f_divergence), vec4(divergence, 0.0, 0.0, 0.0));
+
+// Layer 4: Turbulence 
+imageStore(write_tex, ivec3(id, params.f_turbulence), vec4(turbulence, 0.0, 0.0, 0.0));
+
+// Layer 6: Temperature
+imageStore(write_tex, ivec3(id, params.f_water_temp), vec4(final_temp, 0.0, 0.0, 0.0));
+
+// SALINITY bootstrap (event plan §2.5 prerequisite): no generator initialized
+// SALINITY, so every cell read S = 0 and the biome seeding pass would classify
+// every ocean cell as a freshwater/cryosphere biome (marine centroids need
+// S ≈ 0.75-0.875). This pass is the LAST writer of final water state in the
+// gen stack, so submersion here is settled: single-thread-mapped exact
+// imageStore (safe — exactly one writer per cell), marine value where water
+// remains, 0 on land. hydraulic_flow_sim's runtime atomicAdds then evolve the
+// field from this seed.
+const float MARINE_SALINITY = 0.875; // ≈ 87.5 uint ≈ 35 ppt equivalent (plan §2.5)
+uint salinity_val = uint(MARINE_SALINITY * params.atomic_multiplier);
+imageStore(atomic_tex, ivec3(id, params.a_salinity), uvec4(step(0.0, final_water) * salinity_val, 0u, 0u, 0u));
+}
+
+

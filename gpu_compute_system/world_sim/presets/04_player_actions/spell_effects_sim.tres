@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="LayerSimulator" format=3 uid="uid://sspellfxsim1"]
+
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="1_push_const"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="2_push_config"]
+[ext_resource type="Script" uid="uid://dbybm5wpvqp0v" path="res://gpu_compute_system/common/push_constant_sim_layer_atomic.gd" id="3_pconstant_atomic"]
+[ext_resource type="Script" uid="uid://hs7pi373hxbr" path="res://gpu_compute_system/world_sim/layer_simulator.gd" id="4_layer_sim"]
+[ext_resource type="RDShaderFile" uid="uid://grk1p88hx5sx" path="res://gpu_compute_system/world_sim/presets/04_player_actions/spell_effects_sim.glsl" id="5_shader"]
+
+[sub_resource type="Resource" id="Res_a_action_key"]
+script = ExtResource("3_pconstant_atomic")
+target_domain = 7
+name = &"PLAYER_ACTIONS.ATOMIC.ACTION_KEY"
+value = 0
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Res_a_spell_geothermal"]
+script = ExtResource("3_pconstant_atomic")
+target_domain = 7
+target_sub_layer_index = 3
+name = &"PLAYER_ACTIONS.ATOMIC.SPELL_GEOTHERMAL"
+value = 0
+metadata/_custom_type_script = "uid://dbybm5wpvqp0v"
+
+[sub_resource type="Resource" id="Res_atomic_multiplier"]
+script = ExtResource("2_push_config")
+config_property = "atomic_multiplier"
+config_property = "atomic_multiplier"
+name = &"atomic_multiplier"
+value = 100.0
+metadata/_custom_type_script = "uid://btlk1dx4k8hd0"
+
+[resource]
+script = ExtResource("4_layer_sim")
+system_name = 6
+shader_resource = ExtResource("5_shader")
+push_constants_resources = Array[ExtResource("1_push_const")]([SubResource("Res_a_action_key"), SubResource("Res_a_spell_geothermal"), SubResource("Res_atomic_multiplier")])
+uses_spellbook = true

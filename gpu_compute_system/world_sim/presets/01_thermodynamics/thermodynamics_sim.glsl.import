@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://468ee6fxfhov"
+path="res://.godot/imported/thermodynamics_sim.glsl-e539acf9aa5bfbbed413b60ff219386e.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/01_thermodynamics/thermodynamics_sim.glsl"
+dest_files=["res://.godot/imported/thermodynamics_sim.glsl-e539acf9aa5bfbbed413b60ff219386e.res"]
+
+[params]
+

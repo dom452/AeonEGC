@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://ccc0ke3gqb151"
+path="res://.godot/imported/landmass_sediment_generator.glsl-bac5b9f2461e226389cabede37224d97.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/00_landscape/landmass_sediment_generator.glsl"
+dest_files=["res://.godot/imported/landmass_sediment_generator.glsl-bac5b9f2461e226389cabede37224d97.res"]
+
+[params]
+

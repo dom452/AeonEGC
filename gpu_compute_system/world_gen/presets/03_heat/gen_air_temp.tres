@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="LayerGenerator" format=3 uid="uid://b80p5x0r6d280"]
+
+[ext_resource type="Script" uid="uid://c4lf7tr3nvd8i" path="res://gpu_compute_system/common/custom_image.gd" id="1_cmig"]
+[ext_resource type="Script" uid="uid://dkmnfd067017w" path="res://gpu_compute_system/common/push_constant.gd" id="2_flx72"]
+[ext_resource type="Script" uid="uid://ca17fin4uys8n" path="res://gpu_compute_system/world_gen/layer_generator.gd" id="3_2n4pf"]
+[ext_resource type="Script" uid="uid://btlk1dx4k8hd0" path="res://gpu_compute_system/common/push_constant_world_config.gd" id="3_pcfg"]
+[ext_resource type="Script" uid="uid://bmweb2fh7e52q" path="res://gpu_compute_system/common/push_constant_sim_layer.gd" id="4_g4ar4"]
+[ext_resource type="RDShaderFile" uid="uid://bwh03fabffttc" path="res://gpu_compute_system/world_gen/presets/03_heat/air_temp_generator.glsl" id="4_shdr"]
+
+[sub_resource type="Resource" id="Resource_43frj"]
+script = ExtResource("4_g4ar4")
+target_domain = 3
+target_sub_layer_index = 2
+name = &"ATMOSPHERE.AIR_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_g4ar4"]
+script = ExtResource("4_g4ar4")
+name = &"LANDSCAPE.BEDROCK_HEIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_5gx6u"]
+script = ExtResource("4_g4ar4")
+target_sub_layer_index = 4
+name = &"LANDSCAPE.GROUND_TEMP"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_glc2p"]
+script = ExtResource("4_g4ar4")
+target_domain = 2
+name = &"ENERGY.SUNLIGHT"
+value = 0
+metadata/_custom_type_script = "uid://bmweb2fh7e52q"
+
+[sub_resource type="Resource" id="Resource_eq_temp"]
+script = ExtResource("3_pcfg")
+config_property = "equator_temp"
+config_property = "equator_temp"
+name = &"equator_temp"
+value = 40.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_pole_temp"]
+script = ExtResource("3_pcfg")
+config_property = "pole_temp"
+config_property = "pole_temp"
+name = &"pole_temp"
+value = -30.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_gmix"]
+script = ExtResource("3_pcfg")
+config_property = "ground_mix_factor"
+config_property = "ground_mix_factor"
+name = &"ground_mix_factor"
+value = 0.4
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[sub_resource type="Resource" id="Resource_lapse"]
+script = ExtResource("3_pcfg")
+config_property = "lapse_rate"
+config_property = "lapse_rate"
+name = &"lapse_rate"
+value = 15.0
+metadata/_custom_type_script = "uid://dkmnfd067017w"
+
+[resource]
+script = ExtResource("3_2n4pf")
+system_name = 2
+shader_resource = ExtResource("4_shdr")
+push_constants_resources = Array[ExtResource("2_flx72")]([SubResource("Resource_43frj"), SubResource("Resource_g4ar4"), SubResource("Resource_5gx6u"), SubResource("Resource_glc2p"), SubResource("Resource_eq_temp"), SubResource("Resource_pole_temp"), SubResource("Resource_gmix"), SubResource("Resource_lapse")])

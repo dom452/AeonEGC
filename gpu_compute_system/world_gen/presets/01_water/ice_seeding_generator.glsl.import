@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://c3nkx5h3nxcfg"
+path="res://.godot/imported/ice_seeding_generator.glsl-9b27d88686137bfc89fe924429c80dcb.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_gen/presets/01_water/ice_seeding_generator.glsl"
+dest_files=["res://.godot/imported/ice_seeding_generator.glsl-9b27d88686137bfc89fe924429c80dcb.res"]
+
+[params]
+

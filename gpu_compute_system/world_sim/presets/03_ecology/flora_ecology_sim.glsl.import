@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://clubrnjxpdy7o"
+path="res://.godot/imported/flora_ecology_sim.glsl-e8ca9e56e8dd7792252caa4fb33a0ba7.res"
+
+[deps]
+
+source_file="res://gpu_compute_system/world_sim/presets/03_ecology/flora_ecology_sim.glsl"
+dest_files=["res://.godot/imported/flora_ecology_sim.glsl-e8ca9e56e8dd7792252caa4fb33a0ba7.res"]
+
+[params]
+
