@@ -197,16 +197,11 @@ Each simulation step (`simDeltaTime = 0.01667 s`) dispatches compute passes sequ
 ```text
 world-sim/
 ├── _assets/                 # 3D sphere meshes, layer_globals.gdshaderinc, and vis_terrain.gdshader
-├── _instructions/           # Step-by-step guides for adding WorldGen and Runtime Sim layers
-├── _planning/               # Permanent architectural & physical scale Sources of Truth (SOTs)
-├── _research/               # Academic literature reviews and design research outputs
 ├── camera/                  # Spherical OrbitCamera controller and shader global publisher
 ├── core/                    # GameStateManager, Helpers (VRAM SOT), WorldConfig, Biome & Region managers
 ├── debug/                   # World_Gen.tscn harness, SphereVisualiser, LayerChannelUI, AeonChroniclePanel
 ├── gpu_compute_system/      # GpuWorldState, LayerGenerator, LayerSimulator, PushConstants, and .glsl shaders
 ├── interaction/             # Analytical ray-sphere cursor picker (SphereCursorPicker) & hover telemetry
-├── save_load_system/        # Async GPU readback serialization (SaveManager, SaveGameObject)
 ├── spells/                  # PlayerSpell resource definitions and SpellbookManager (Binding 10)
-├── tests/                   # Automated verification & shader/pipeline test suites
 └── tools/                   # Editor utilities and shader global code generation
 ```
