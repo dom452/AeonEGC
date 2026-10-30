@@ -1,10 +1,11 @@
 # World Sim (Working Title: *Aeon*)
 
-**World Sim** is a GPU-accelerated planetary simulation and experimental god-game built in **Godot 4.6** (Forward+ / Vulkan / D3D12 `RenderingDevice`). Rather than scripting weather timers or commanding individual units, the entire planet—solar insolation, thermodynamics, two-layer atmospheric fluid dynamics, hydrostatic surface water flow, erosion, and four-stage plant succession—runs continuously in GLSL 4.50 compute shaders on the GPU at a fixed 60 Hz timestep.
+A GPU-accelerated planetary simulation and experimental god-game built in Godot 4.6 (Forward+ / Vulkan / D3D12). 
+No scripted weather timers or commanding individual units. Instead, the entire planet—solar insolation, thermodynamics, two-layer atmospheric fluid dynamics, hydrostatic surface water flow, and four-stage plant succession — runs continuously in compute shaders at a fixed 60 Hz timestep.
 
 Players interact with the world as an **indirect geological and arcane force**: introducing localized physical perturbations (such as awakening a geothermal vent in a frozen basin) and watching second- and third-order ecological cascades unfold across simulated years.
 
-`(IMAGE: Hero screenshot of the 3D planetary globe in World_Gen.tscn showing continents, ocean depth gradients, polar ice caps, vegetation biomes, and corner-tile biome borders)`
+<img width="1446" height="1008" alt="3D planetary globe in World_Gen.tscn showing continents, ocean depth gradients, polar ice caps, vegetation biomes, and corner-tile biome borders" src="https://github.com/user-attachments/assets/fa2c8ddc-5e96-4023-be62-04cdcf9600cd" />
 
 ---
 
@@ -35,7 +36,7 @@ Players interact with the world as an **indirect geological and arcane force**: 
 
 When [`debug/World_Gen.tscn`](debug/World_Gen.tscn) launches, the window is divided into two primary regions: a **Left Control & Telemetry Sidebar** and a **Main Tabbed Workspace** on the right.
 
-`(IMAGE: Annotated full-window screenshot of World_Gen.tscn highlighting the Left Sidebar controls, Telemetry readout, RGB Channel Mapper, Chronicle Panel, and Main 3D World Viewport)`
+<img width="410" height="1057" alt="Left Sidebar controls, Telemetry readout, RGB Channel Mapper, Chronicle Panel, and Main 3D World Viewport" src="https://github.com/user-attachments/assets/65d5c21f-882d-47b5-b5e1-48a7fb42cd45" />
 
 ### A. Left Sidebar (`DebugPanel`)
 From top to bottom, the sidebar contains:
@@ -64,7 +65,7 @@ From top to bottom, the sidebar contains:
   [`WorldVisualiserUX`](gpu_compute_system/common/world_vis_ux.gd) replaces the placeholder tabs at startup with scrollable 2D equirectangular slice inspectors for every simulation domain:
   * **`Topography Generation`**, **`Thermodynamics`**, **`Fluid Dynamics`**, **`Ecology Baseline`**, **`Fauna Behavior`**, **`Civilization Behavior`**, **`Player Actions`**, and **`Coarse Dynamics`** ($64\times 64$ 2-layer atmospheric SWE fields).
 
-`(IMAGE: Screenshot of one of the 2D System Telemetry Tabs showing side-by-side real-time equirectangular heatmaps of Float, Atomic, and Coarse simulation slices)`
+<img width="1485" height="1049" alt="side-by-side real-time equirectangular heatmaps of Float, Atomic, and Coarse simulation slices" src="https://github.com/user-attachments/assets/242a31db-518f-421f-b46c-05598aef4882" />
 
 ---
 
@@ -94,7 +95,9 @@ To overlay raw physical fields directly onto the 3D sphere:
    * **Blue:** `[FLOAT] ATMOSPHERE_HUMIDITY`
 3. Reset all three dropdowns to **`Flat 1.0`** to return to the standard natural-color planet view.
 
-`(IMAGE: Side-by-side comparison of the 3D globe in Standard Terrain Mode vs. RGB False-Color Data-Lens Mode mapping Ground Temperature, Tree Canopy, and Atmospheric Humidity)`
+<img width="516" height="592" alt="RGB False-Color Data-Lens Mode mapping" src="https://github.com/user-attachments/assets/18d4e9b8-5b5c-4894-85e5-c67e9a2e1162" />
+
+<img width="1053" height="1020" alt="Side-by-side comparison of the 3D globe in Standard Terrain Mode vs. RGB False-Color Data-Lens Mode mapping Ground Temperature, Tree Canopy, and Atmospheric Humidity" src="https://github.com/user-attachments/assets/f1b0be29-fc8e-48fa-89e3-7d044a3c3fdf" />
 
 ---
 
@@ -118,8 +121,6 @@ Once you click **`Generate World`** and **`Start Sim`**, look for these emergent
    * Over the next several simulated years, watch the injected geothermal heat conduct outward, thaw ice into liquid river runoff, elevate local humidity, and trigger pioneer grass and shrub colonization.
    * When the warming cells cross the hysteresis threshold into a higher-tier biome (such as **Thermal Oasis** or **Boreal Taiga**), particle and audio cues fire on the globe, your **`Impact`** score increases, and the **`Chronicle`** logs the birth and expansion of a newly christened region.
 
-`(IMAGE: Sequence of 3 screenshots showing a Geothermal Vent cast in a polar basin at Year 0, thawing river runoff at Year 1, and an emerging named Thermal Oasis region with Chronicle log entry at Year 3)`
-
 ---
 
 ## 5. Design Philosophy: Indirect Agency & Long Feedback Loops
@@ -138,8 +139,6 @@ Most strategy and god games rely on immediate feedback—validating every click 
 ---
 
 ## 6. Technical & GPU Architecture
-
-`(IMAGE: Architecture diagram showing the 5 Execution Phases, Universal Set 0 GPU Bindings 0-12, and the zero-stall Texture2DArrayRD / 1 Hz Async Snapshot Readback bridge to the CPU)`
 
 ### A. Multi-Scale Planetary Grids & Topology
 All compute shaders operate on a closed spherical topology with continuous $360^\circ$ longitudinal X-wrapping (`(x + W) % W`), $\cos(\text{latitude})$ zonal metric scaling, and branchless $180^\circ$ polar crossover (`(x + W/2) % W` with vector momentum sign inversion across the poles):
@@ -198,7 +197,6 @@ Each simulation step (`simDeltaTime = 0.01667 s`) dispatches compute passes sequ
 ```text
 world-sim/
 ├── _assets/                 # 3D sphere meshes, layer_globals.gdshaderinc, and vis_terrain.gdshader
-├── _documentation/          # HTML API & architecture reference documentation (open index.html)
 ├── _instructions/           # Step-by-step guides for adding WorldGen and Runtime Sim layers
 ├── _planning/               # Permanent architectural & physical scale Sources of Truth (SOTs)
 ├── _research/               # Academic literature reviews and design research outputs
@@ -212,9 +210,3 @@ world-sim/
 ├── tests/                   # Automated verification & shader/pipeline test suites
 └── tools/                   # Editor utilities and shader global code generation
 ```
-
-### Further Reading
-* **Interactive HTML Documentation:** Open [`_documentation/index.html`](_documentation/index.html) in any browser for complete class references, GPU pipeline breakdowns, and flora/ecology equations.
-* **Global Architecture SOT:** [`_planning/global_architecture_SOT.md`](_planning/global_architecture_SOT.md)
-* **Global Spatial, Physical & Temporal Scale SOT:** [`_planning/global_scale_SOT.md`](_planning/global_scale_SOT.md)
-* **Adding New Compute Passes:** [`_instructions/01_how_to_create_layer_generator.md`](_instructions/01_how_to_create_layer_generator.md) & [`_instructions/02_how_to_create_sim_layer.md`](_instructions/02_how_to_create_sim_layer.md)
