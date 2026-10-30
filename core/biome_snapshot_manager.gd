@@ -1,108 +1,89 @@
 extends Node
+## Periodically reads back the GPU `BIOME_TYPE` atomic layer and diffs it on a
+## worker thread against a CPU shadow copy to emit lossless cell transition batches.
 class_name BiomeSnapshotManager
 
-## CPU-side snapshot/diff pipeline for the biome classification system
-## (_planning/event_logging_system_plan.md §3.1 — Option C: the CPU derives
-## transitions from full-state diffing, never from an event stream).
-##
-## Cycle (every `snapshot_interval` real seconds while the sim runs):
-##   1. REQUEST — `RenderingDevice.texture_get_data_async()` of the BIOME_TYPE
-##      layer of the atomic texture. Gated by an in-flight flag: never two
-##      readbacks of the same layer at once.
-##   2. DIFF — the callback hands the raw bytes to a WorkerThreadPool task; a
-##      linear scan compares each texel's biome byte against the shadow copy
-##      and emits one BiomeTransitionRecord per mismatch. The shadow is then
-##      updated to the read-back state inside the same worker task (the task
-##      exclusively owns both arrays; the main thread never touches them
-##      between request and commit).
-##   3. APPLY — on the main thread the transition batch is emitted via
-##      `transitions_resolved` (RegionGraphManager consumes it in Phase 3)
-##      and the first-diff bootstrap signal fires once after generation.
-##
-## Semantics (plan §2.6):
-##   - A texel whose biome byte is 255 (or otherwise > BIOME_MAX_VALID_ID) is
-##     UNCLASSIFIED: mismatches involving it are no-ops (no record).
-##   - Attribution-bit-only changes (same biome) are ignored by the graph but
-##     still refresh the shadow so causation data stays current.
-##
-## Bootstrap: `initialize_shadow_from_gpu()` performs the first readback and,
-## on success, emits `shadow_ready` exactly once — the Phase 3 hook point for
-## the initial CCL (§3.4). Until that fires, periodic diffing is suppressed.
-
-## Real-time seconds between BIOME_TYPE readbacks (plan default: 1 Hz).
+## Real-time interval in seconds between consecutive `BIOME_TYPE` GPU readbacks.
 @export var snapshot_interval : float = 1.0
 
-## Opt-in debug output. The plan (§3.1) forbids replicating the frozen POC's
-## auto-generated HUD label; this prints to the console only.
+## When true, prints snapshot initialization and diff timing summaries to the console.
 @export var debug_output : bool = false
 
-## Emitted on the main thread with the batch of transitions derived from one
-## diff. Order within the batch follows ascending cell index (the diff is a
-## linear scan), which RegionGraphManager may rely on for determinism.
+## Emitted on the main thread with the ascending-cell-index batch of transitions from one diff.
 signal transitions_resolved(transitions : Array[BiomeTransitionRecord])
 
-## Emitted once after the first successful full readback + shadow
-## initialization (used by Phase 3 to run the one-time initial CCL).
+## Emitted once on the main thread after the initial full readback populates `_shadow`.
 signal shadow_ready
 
-## True once the shadow holds a real GPU snapshot (after generation or load).
+## True once `_shadow` holds an initialized snapshot from the GPU.
 var has_shadow : bool = false
 
+## Active GPU world state whose `atomic_state_texture` is sampled.
 var _world_state : GpuWorldState
+## Absolute layer index of `LANDSCAPE.BIOME_TYPE` inside `atomic_state_texture`.
 var _biome_layer_index : int = -1
-var _shadow : PackedInt32Array = PackedInt32Array()  # one entry per cell: full texel
+## Per-cell CPU shadow buffer storing the most recently committed 32-bit `BIOME_TYPE` texels.
+var _shadow : PackedInt32Array = PackedInt32Array()
+## True while an async GPU readback is currently in flight.
 var _in_flight : bool = false
+## Elapsed real-time seconds accumulated since the last snapshot request.
 var _accum : float = 0.0
-var _diff_generation : int = 0  # guards against stale worker commits
+## Monotonically increasing counter guarding against commits from superseded worker tasks.
+var _diff_generation : int = 0
+## True once `shadow_ready` has been emitted for the current world binding.
 var _shadow_ready_emitted : bool = false
+## Total number of grid cells (`world_width * world_height`) in the bound world.
 var _cell_count : int = 0
+## Timestamp (`Time.get_ticks_msec()`) of the most recent committed diff or shadow initialization.
 var _last_diff_msec : int = 0
+## Timestamp (`Time.get_ticks_msec()`) when the current worker diff task was dispatched.
 var _last_cycle_msec : int = 0
+## True when the most recent `_scan_diff` call validated the readback buffer size without error.
+var _scan_succeeded : bool = false
 
 
+## Disables per-frame processing until `bind_world_state` attaches a live `GpuWorldState`.
 func _ready() -> void:
 	set_process(false)
 
 
-## Wires the manager to the live GPU state and arms the cadence. Call after
-## generation completes or after a save load. `first_diff_is_bootstrap`
-## controls whether the next full diff emits transitions (true after a
-## load with no saved graph: the initial CCL fallback owns that diff).
+## Binds the manager to `ws`, allocates the CPU shadow buffer, and enables periodic snapshot polling.
 func bind_world_state(ws : GpuWorldState) -> void:
+	# Resolve the BIOME_TYPE atomic layer index and allocate a zeroed shadow buffer for the grid.
 	_world_state = ws
 	_biome_layer_index = GameStateManager.atomic_layer_to_indices_map[Helpers.sim_layers.LANDSCAPE][3]
 	_cell_count = GameStateManager.world_config.world_width * GameStateManager.world_config.world_height
 	_shadow.resize(_cell_count)
 	_shadow.fill(0)
+	# Reset state flags and increment generation to invalidate any worker tasks from a prior world.
 	has_shadow = false
 	_shadow_ready_emitted = false
 	_in_flight = false
 	_accum = 0.0
-	_diff_generation += 1  # invalidate any in-flight worker from a previous world
+	_diff_generation += 1
 	set_process(true)
 
 
-## Stops the cadence and drops the shadow (used on world unload/teardown).
+## Detaches the active world state, invalidates in-flight workers, and halts periodic polling.
 func unbind() -> void:
+	# Advance generation so any running worker discards its result on completion.
 	_diff_generation += 1
 	_world_state = null
 	has_shadow = false
 	set_process(false)
 
 
-## Performs the first full readback and initializes the shadow; emits
-## `shadow_ready` once on success. Called by GameStateManager on
-## `on_generation_complete` (§2.5 CPU handoff) or on the legacy-load path.
+## Requests the initial full `BIOME_TYPE` GPU readback to populate `_shadow` and emit `shadow_ready`.
 func initialize_shadow_from_gpu() -> void:
+	# Guard against uninitialized world state or overlapping readback requests.
 	if _world_state == null or _world_state.rd == null:
 		push_error("BiomeSnapshotManager: initialize_shadow_from_gpu() called before bind_world_state().")
 		return
 	if _in_flight:
 		push_warning("BiomeSnapshotManager: bootstrap readback requested while one is in flight; ignoring.")
 		return
+	# Issue an async GPU readback tagged as a bootstrap cycle.
 	_in_flight = true
-	# Pending-generation marker: the worker will emit shadow_ready instead of
-	# a transition batch for this cycle (mode flag captured by the bind below).
 	var rd : RenderingDevice = _world_state.rd
 	var err : Error = rd.texture_get_data_async(
 		_world_state.atomic_state_texture,
@@ -114,11 +95,12 @@ func initialize_shadow_from_gpu() -> void:
 		_in_flight = false
 
 
+## Accumulates real frame time and requests a non-bootstrap snapshot every `snapshot_interval` seconds.
 func _process(delta : float) -> void:
+	# Skip polling while a readback is already in flight or before the bootstrap shadow is ready.
 	if _in_flight or not has_shadow or _world_state == null:
-		# In-flight gating: never two readbacks at once (plan §3.1 step 1).
-		# Also self-throttles while a diff worker is committing.
 		return
+	# Trigger a periodic snapshot request once the interval timer elapses.
 	_accum += delta
 	if _accum < snapshot_interval:
 		return
@@ -126,9 +108,11 @@ func _process(delta : float) -> void:
 	_request_snapshot(false)
 
 
+## Issues an asynchronous GPU readback of the `BIOME_TYPE` layer from `atomic_state_texture`.
 func _request_snapshot(is_bootstrap : bool) -> void:
 	if _world_state == null or _world_state.rd == null:
 		return
+	# Mark readback in-flight and register `_on_snapshot_received` as the completion callback.
 	_in_flight = true
 	var rd : RenderingDevice = _world_state.rd
 	var err : Error = rd.texture_get_data_async(
@@ -141,14 +125,15 @@ func _request_snapshot(is_bootstrap : bool) -> void:
 		_in_flight = false
 
 
-## Async callback (verified main-thread by the Phase 2 gate harness).
-## `is_bootstrap` distinguishes the shadow-init cycle from a diff cycle.
+## Validates the raw readback byte size and dispatches either the bootstrap or diff worker task.
 func _on_snapshot_received(data : PackedByteArray, is_bootstrap : bool) -> void:
 	_in_flight = false
+	# Discard the callback if the world was torn down while the readback was in flight.
 	if _world_state == null or _world_state.rd == null:
-		return  # world torn down mid-flight; drop the stale bytes
+		return
 
-	var expected_bytes : int = _cell_count * 4  # R32_UINT: 4 bytes per cell
+	# Verify the readback matches the expected 4-byte `R32_UINT` texel count.
+	var expected_bytes : int = _cell_count * 4
 	if data.size() != expected_bytes:
 		push_error("BiomeSnapshotManager: readback size mismatch — expected %d bytes, got %d."
 			% [expected_bytes, data.size()])
@@ -156,40 +141,42 @@ func _on_snapshot_received(data : PackedByteArray, is_bootstrap : bool) -> void:
 	
 	var gen : int = _diff_generation
 
+	# Route to the bootstrap worker when `_shadow` has not yet been initialized.
 	if not has_shadow:
-		# Bootstrap semantics regardless of which entry point requested it.
-		# The full-copy + shadow-init runs on a worker; ~1 MB memcpy + zeroing.
 		_diff_generation += 1
 		gen = _diff_generation
 		WorkerThreadPool.add_task(_bootstrap_worker.bind(data, gen))
 		return
 
-	# Periodic diff cycle.
+	# Route to the periodic diff worker when `_shadow` is already initialized.
 	_diff_generation += 1
 	gen = _diff_generation
 	_last_cycle_msec = Time.get_ticks_msec()
 	WorkerThreadPool.add_task(_diff_worker.bind(data, gen, is_bootstrap))
 
 
-## Worker: initializes the shadow from the first full snapshot.
+## Converts the first GPU snapshot into `_shadow` on a worker thread and defers `shadow_ready` to the main thread.
 func _bootstrap_worker(data : PackedByteArray, gen : int) -> void:
+	# Abort if a newer world binding superseded this worker task.
 	if gen != _diff_generation:
-		return  # superseded by a newer world/bind; discard
+		return
+	# Convert raw bytes to 32-bit integers and validate element count.
 	var texels : PackedInt32Array = data.to_int32_array()
 	if texels.size() != _cell_count:
-		# to_int32_array() size surprise would indicate a driver layout break;
-		# refuse to corrupt the shadow (gate harness covers byte layout).
 		_on_bootstrap_failed.call_deferred()
 		return
+	# Store the initial shadow copy and schedule `shadow_ready` emission on the main thread.
 	_shadow = texels.duplicate()
 	has_shadow = true
 	_on_shadow_ready.call_deferred()
 
 
+## Logs an error on the main thread when a readback buffer fails integer-array size validation.
 func _on_bootstrap_failed() -> void:
 	push_error("BiomeSnapshotManager: bootstrap readback produced an unexpected layout; shadow NOT initialized.")
 
 
+## Marks bootstrap completion on the main thread and emits `shadow_ready` once.
 func _on_shadow_ready() -> void:
 	if _shadow_ready_emitted:
 		return
@@ -201,25 +188,21 @@ func _on_shadow_ready() -> void:
 	shadow_ready.emit()
 
 
-## Worker: linear-scan diff of snapshot vs shadow. Both arrays are exclusively
-## owned by this task until commit (the main thread never touches them while
-## `_in_flight` or the generation guard holds).
+## Runs `_scan_diff` on a worker thread and schedules `_commit_diff` on the main thread.
 func _diff_worker(data : PackedByteArray, gen : int, _is_bootstrap : bool) -> void:
+	# Abort if the world binding changed before the worker started.
 	if gen != _diff_generation:
-		return  # superseded; discard (e.g. unbind() mid-diff)
+		return
+	# Scan for biome transitions and defer the resulting batch to the main thread.
 	var start_msec : int = Time.get_ticks_msec()
 	var transitions : Array[BiomeTransitionRecord] = _scan_diff(data, gen)
 	if transitions.is_empty() and not _scan_succeeded:
-		return  # layout failure already reported by the seam
+		return
 	var diff_msec : int = Time.get_ticks_msec() - start_msec
 	_commit_diff.call_deferred(transitions, gen, diff_msec)
 
 
-## The diff loop proper: compare `data` against `_shadow`, emit one record per
-## classified biome change, refresh the shadow to the snapshot state. Shared
-## by the worker thread (production) and synchronous tests (verification).
-var _scan_succeeded : bool = false
-
+## Compares `data` against `_shadow`, updates `_shadow` in place, and returns all valid biome transitions.
 func _scan_diff(data : PackedByteArray, _gen : int) -> Array[BiomeTransitionRecord]:
 	_scan_succeeded = false
 	var transitions : Array[BiomeTransitionRecord] = []
@@ -232,8 +215,9 @@ func _scan_diff(data : PackedByteArray, _gen : int) -> Array[BiomeTransitionReco
 	var max_valid : int = Helpers.BIOME_MAX_VALID_ID
 	var id_mask : int = Helpers.BIOME_TEXEL_ID_MASK
 	var attr_shift : int = Helpers.BIOME_TEXEL_ATTRIBUTION_SHIFT
-	var shadow : PackedInt32Array = _shadow  # worker-exclusive until commit (generation guard)
+	var shadow : PackedInt32Array = _shadow
 
+	# Compare each cell's new texel against the shadow copy in ascending cell-index order.
 	for i : int in _cell_count:
 		var new_texel : int = texels[i]
 		var old_texel : int = shadow[i]
@@ -241,9 +225,7 @@ func _scan_diff(data : PackedByteArray, _gen : int) -> Array[BiomeTransitionReco
 			continue
 		var new_id : int = new_texel & id_mask
 		var old_id : int = old_texel & id_mask
-		# Shadow refresh happens for EVERY mismatched cell (below); transition
-		# records only for real biome changes between two classified states
-		# (255 on either side is a no-op per plan §2.6).
+		# Emit a transition record when both old and new biome IDs are valid and distinct.
 		if old_id != new_id and old_id <= max_valid and new_id <= max_valid:
 			var rec : BiomeTransitionRecord = BiomeTransitionRecord.new()
 			rec.cell_index = i
@@ -251,16 +233,16 @@ func _scan_diff(data : PackedByteArray, _gen : int) -> Array[BiomeTransitionReco
 			rec.new_biome = new_id
 			rec.attribution_bits = (new_texel >> attr_shift) & 0xFFFFFF
 			transitions.append(rec)
+		# Always update the shadow texel so attribution bits stay current even when the biome ID is unchanged.
 		shadow[i] = new_texel
 	return transitions
 
 
-## Main-thread commit: emit the batch (RegionGraphManager applies it in
-## Phase 3) and update debug stats. `transitions` is passed by reference from
-## the worker — the generation guard makes cross-world staleness impossible.
+## Emits `transitions_resolved` on the main thread if `gen` matches the active generation and `transitions` is non-empty.
 func _commit_diff(transitions : Array[BiomeTransitionRecord], gen : int, diff_msec : int) -> void:
+	# Discard stale worker results if the world was rebound before main-thread commit.
 	if gen != _diff_generation:
-		return  # superseded between worker finish and commit
+		return
 	_last_diff_msec = Time.get_ticks_msec()
 	if debug_output and not transitions.is_empty():
 		var cycle_ms : int = _last_diff_msec - _last_cycle_msec
@@ -272,18 +254,18 @@ func _commit_diff(transitions : Array[BiomeTransitionRecord], gen : int, diff_ms
 		transitions_resolved.emit(transitions)
 
 
-## Direct access for systems that need the raw texel view (economy §4.1
-## neighbor-attribution lookups). Read-only: the CPU never writes BIOME_TYPE.
+## Returns the raw 32-bit `BIOME_TYPE` shadow texel at `cell_index`, or 0 if out of bounds.
 func get_shadow_texel(cell_index : int) -> int:
 	if cell_index < 0 or cell_index >= _shadow.size():
 		return 0
 	return _shadow[cell_index]
 
 
+## Returns the low-byte biome ID (`0..17` or `255`) from the shadow texel at `cell_index`.
 func get_shadow_biome(cell_index : int) -> int:
 	return get_shadow_texel(cell_index) & Helpers.BIOME_TEXEL_ID_MASK
 
 
-## Full read-only copy of the shadow texels (the initial CCL's input, §3.4).
+## Returns a duplicate copy of the entire `_shadow` texel buffer for initial region-graph labeling.
 func get_shadow_snapshot() -> PackedInt32Array:
 	return _shadow.duplicate()

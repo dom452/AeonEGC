@@ -1,56 +1,45 @@
 extends Node
+## Coalesces raw biome transition batches into rate-limited visual particle
+## bursts, spatialized audio cues, and UI notifications on the globe.
 class_name BiomeFeedbackManager
 
-## Player-facing transition feedback (event-logging plan §5.2), driven by the
-## snapshot manager's transition batches with per-batch COALESCING (§5.2 rate
-## limiting): one notification per (new_biome, region-area) cluster, never one
-## per cell — a succession wave diffing hundreds of cells must not spawn
-## hundreds of floating texts, particles, and audio triggers.
-##
-## Components:
-##   1. Tactile: `biome_transition_feedback` signal (UI floating text / wallet).
-##   2. Globe marker: temporary particle burst at the sphere position of the
-##      cluster's largest cell group (converted from UV grid coords).
-##   3. Audio: one spatialized cue per coalesced cluster, keyed by biome
-##      category. Streams are pre-loaded per category; missing files degrade
-##      silently to no audio.
-##
-## The frozen POC's `impact_currency_gained` signal is untouched (§5.2) — the
-## two signal names never collide, and this manager never emits it (Phase 5's
-## economy emits its own).
-
+## Emitted once per coalesced biome cluster in a transition batch for UI feedback listeners.
 signal biome_transition_feedback(cell : Vector2i, old_biome : int, new_biome : int, amount : int)
 
-## Globe mesh the markers attach to (exported; assigned by the scene).
+## Target planet mesh to which 3D particle bursts and audio emitters are aligned.
 @export var globe : MeshInstance3D
 
-## Maximum coalesced clusters rendered per batch (hard ceiling for particle
-## and audio spawning during succession storms).
+## Maximum number of coalesced biome clusters that can spawn particles/audio in a single diff batch.
 @export var max_clusters_per_batch : int = 8
 
-## Audio streams keyed by naming category (optional; empty = silent).
+## Optional lookup of `AudioStream` assets keyed by biome naming category; missing entries play nothing.
 @export var audio_streams : Dictionary = {}
 
+## Cached lookup table mapping biome IDs (`0..17`) to their naming/audio category strings.
 @onready var _category_for_biome : PackedStringArray = RegionNameGenerator.BIOME_CATEGORY
 
+## Container node holding transient 3D particle bursts and audio players.
 var _marker_parent : Node3D
 
 
+## Creates the marker container node and subscribes to `BiomeSnapshotManager.transitions_resolved`.
 func _ready() -> void:
+	# Create a dedicated child node to parent transient feedback particles and audio players.
 	_marker_parent = Node3D.new()
 	_marker_parent.name = "BiomeFeedbackMarkers"
 	add_child(_marker_parent)
+	# Connect to the active snapshot manager's transition signal if available.
 	var bsm : BiomeSnapshotManager = GameStateManager.biome_snapshot_manager
 	if bsm and not bsm.transitions_resolved.is_connected(_on_transitions):
 		bsm.transitions_resolved.connect(_on_transitions)
 
 
-## Consumes one diff batch and coalesces it into clusters.
+## Groups a transition batch by target biome ID and triggers up to `max_clusters_per_batch` feedback cues.
 func _on_transitions(transitions : Array) -> void:
 	if transitions.is_empty():
 		return
-	# Cluster by new biome (§5.2: one notification per same-new_biome cluster).
-	var clusters : Dictionary = {}  # new_biome -> {count, first_cell, last_cell}
+	# Coalesce cell transitions by `new_biome` so mass succession waves trigger one cue per biome type.
+	var clusters : Dictionary = {}
 	for t : BiomeTransitionRecord in transitions:
 		var new_biome : int = t.new_biome
 		if not clusters.has(new_biome):
@@ -59,6 +48,7 @@ func _on_transitions(transitions : Array) -> void:
 		clusters[new_biome]["count"] += 1
 		clusters[new_biome]["cell"] = t.cell_index
 
+	# Emit UI signal, particle burst, and spatial audio for each coalesced cluster up to the per-batch cap.
 	var emitted : int = 0
 	for new_biome : int in clusters:
 		if emitted >= max_clusters_per_batch:
@@ -67,21 +57,17 @@ func _on_transitions(transitions : Array) -> void:
 		var cell_index : int = cluster["cell"]
 		@warning_ignore("integer_division")
 		var cell : Vector2i = Vector2i(cell_index % _grid_width(), cell_index / _grid_width())
-		# 1. Tactile (amount 0 here — the Phase 5 economy emits its own signal
-		#    with real payouts; this is the presentation-layer notification).
 		biome_transition_feedback.emit(cell, -1, new_biome, 0)
-		# 2. Globe particle burst at the cluster's last cell.
 		_spawn_marker(cell, new_biome)
-		# 3. Audio cue keyed by category.
 		_play_cue(new_biome, cell)
 		emitted += 1
 
 
-func _spawn_marker(cell : Vector2i, new_biome : int) -> void:
+## Spawns a self-freeing one-shot 3D particle burst on the surface of `globe` at `cell`.
+func _spawn_marker(cell : Vector2i, _new_biome : int) -> void:
 	if globe == null:
 		return
-	# UV -> sphere direction matching the visualizer's mapping (v = 0 at the
-	# +Y pole; u wraps longitude). Local to the globe so it follows rotation.
+	# Convert 2D grid coordinates to a unit-sphere direction vector matching the terrain UV projection.
 	var u : float = (float(cell.x) + 0.5) / _grid_width()
 	var v : float = (float(cell.y) + 0.5) / _grid_height()
 	var theta : float = u * TAU
@@ -91,6 +77,7 @@ func _spawn_marker(cell : Vector2i, new_biome : int) -> void:
 		cos(phi),
 		sin(phi) * sin(theta)
 	)
+	# Configure a one-shot outward particle burst just above the sphere surface.
 	var burst : GPUParticles3D = GPUParticles3D.new()
 	burst.amount = 12
 	burst.lifetime = 1.2
@@ -113,20 +100,23 @@ func _spawn_marker(cell : Vector2i, new_biome : int) -> void:
 	mesh.height = 1.0
 	burst.draw_pass_1 = mesh
 	_marker_parent.add_child(burst)
-	# Self-cleanup once the burst dies.
+	# Free the particle node automatically after its emission lifetime completes.
 	get_tree().create_timer(1.5).timeout.connect(func() -> void:
 		if is_instance_valid(burst):
 			burst.queue_free()
 	)
 
 
+## Plays a spatialized 3D audio cue at `cell` for `new_biome`'s category if a stream is configured.
 func _play_cue(new_biome : int, cell : Vector2i) -> void:
+	# Resolve the biome category and abort silently if no audio stream is assigned for it.
 	var category : String = _category_for_biome[new_biome] if new_biome >= 0 and new_biome < _category_for_biome.size() else "grassland"
 	if not audio_streams.has(category):
 		return
 	var stream : AudioStream = audio_streams[category]
 	if stream == null:
 		return
+	# Spawn a temporary 3D audio player positioned on the globe surface and free it on completion.
 	var player : AudioStreamPlayer3D = AudioStreamPlayer3D.new()
 	player.stream = stream
 	player.unit_size = 4.0
@@ -141,11 +131,13 @@ func _play_cue(new_biome : int, cell : Vector2i) -> void:
 	player.play()
 
 
+## Returns the active world grid width, defaulting to 512 if `WorldConfig` is not yet loaded.
 func _grid_width() -> int:
 	var wc : WorldConfig = GameStateManager.world_config
 	return wc.world_width if wc else 512
 
 
+## Returns the active world grid height, defaulting to 512 if `WorldConfig` is not yet loaded.
 func _grid_height() -> int:
 	var wc : WorldConfig = GameStateManager.world_config
 	return wc.world_height if wc else 512

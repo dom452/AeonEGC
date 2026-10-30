@@ -1,22 +1,31 @@
 extends GpuWorld
+## Orchestrates the runtime simulation pipeline by dispatching each configured LayerSimulator
+## compute pass in sequence, stepping fixed-rate physics, and swapping ping-pong buffers each frame.
 class_name WorldSimulator
-## The Godot-side dispatcher that orchestrates the simulation loop using double-buffered float and SSBO states, and a single atomic state.
 
+## Ordered list of runtime simulation compute passes configured in WorldConfig.
 var sim_layers : Array[LayerSimulator]
 
 
+## Unused initialization constructor.
 func _init() -> void:
 	pass
-	
+
+
+## Unused ready callback.
 func _ready() -> void:
 	pass
 
+
+## Initializes all simulation compute passes and synchronizes ping-pong buffers so read/write states match.
 func start_sim() -> void:
+	# Initialize all shader passes and synchronize double-buffered textures.
 	initialise_sim_layers()
 	if world_state:
 		world_state.sync_double_buffers()
 
-## Initializes the simulation textures, uniforms, and layer configurations.
+
+## Binds world state, auto-calibrates radiative cooling, and initializes compute pipelines for each sim layer.
 func initialise_sim_layers() -> Error:
 	if is_opengl:
 		return Error.ERR_CANT_CREATE
@@ -30,37 +39,33 @@ func initialise_sim_layers() -> Error:
 	
 	rd = world_state.rd
 	
-	# Auto-calibrate stefan_scale from the global energy balance formula before layer init,
-	# so the thermodynamics push constant picks up the computed value on first dispatch.
+	# Auto-calibrate radiative cooling constant (stefan_scale) so global mean temperature settles at the design target.
 	if world_config.auto_calibrate_stefan:
 		world_config.calibrate_stefan_scale()
 	
-	# create derived resources from shared uniform sources.
+	# Initialize compiled shaders, pipelines, and uniform sets for each runtime pass.
 	for sl : LayerSimulator in sim_layers:
 		sl.initialise_sim_layer(rd)
 		
 	return Error.OK
 
-## Processes the simulation step for a given delta time, dispatching all sim layers and swapping read/write buffer indices.
+
+## Dispatches all simulation passes across `sim_speed` iterations per frame at a fixed 60 Hz timestep (`0.01667s`).
 @warning_ignore("unused_parameter")
 func _process(deltaTime : float) -> void:
 	if is_opengl or GameStateManager.is_paused:
 		return	
-		
-	# Reduce speed if sim running slower that 60fps
-	# if deltaTime > (1.0/35.0): 
-	# 		GameStateManager.instance.decrease_sim_speed()
 
-	# process this frame
+	# Run the full simulation pipeline once per speed multiplier tick (up to max_sim_speed passes per frame).
 	for i : int in GameStateManager.sim_speed:
 		for layer : LayerSimulator in sim_layers:
-			# sim_layers dispatch() includes creating, dispatching and ending a compute list. 
+			# Dispatch this compute pass into a command list writing to the write_world_state_index buffer.
 			layer.dispatch(
 				world_state.write_world_state_index, 
 				GameStateManager.simDeltaTime,
-				)
-		# NOTE: No end of dispatch barrier needed as Godot 4.6 automatically injects them, 
-		# where needed, between compute lists. 
-		# swap the textures so the write texture from this frame becomes the read texture. 
+			)
+		# Swap ping-pong buffer indices so newly written data becomes readable by subsequent steps.
 		world_state.swap_state()
+	# Notify visualizers and inspectors that a new read frame has completed.
 	world_state.end_frame()
+

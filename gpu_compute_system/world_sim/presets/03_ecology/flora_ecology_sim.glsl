@@ -1,12 +1,22 @@
 #[compute]
 #version 450
 
+// =============================================================================
+// FLORA ECOLOGY SIMULATION
+// Compute pass that simulates plant succession, carrying capacity, species competition, and detritus recycling.
+// Physical units: Biomass densities scaled by flora atomic multiplier (1.0 = standard saturation cover),
+//                soil nutrients scaled by standard atomic multiplier.
+// Bindings: Reads climate from read_tex (Set 0, Binding 1);
+//           Writes growth rate modifier, canopy shade, and scent markers to write_tex (Set 0, Binding 0);
+//           Updates plant biomass, detritus, and soil nutrients in atomic_tex (Set 0, Binding 2).
+// =============================================================================
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // === UNIFIED SIMULATION UNIFORM BINDINGS ===
-// 0: Fine Float Write (r16f) | 1: Fine Float Read (r16f) | 2: Atomic RW (r32ui)
-// 3: SSBO Write (std430)     | 4: SSBO Read (std430)     | 5: Atomic Visual (r16f)
-// 6: Coarse Float Write (r32f)| 7: Coarse Float Read (r32f)
+// 0: Fine Float Write (r16f)   | 1: Fine Float Read (r16f)    | 2: Atomic RW (r32ui)
+// 3: SSBO Write (std430)       | 4: SSBO Read (std430)        | 5: Atomic Visual (r16f)
+// 6: Coarse Float Write (r32f) | 7: Coarse Float Read (r32f)
 layout(r16f, set = 0, binding = 0) restrict uniform image2DArray write_tex;
 layout(r16f, set = 0, binding = 1) restrict readonly uniform image2DArray read_tex;
 layout(r32ui, set = 0, binding = 2) uniform uimage2DArray atomic_tex;
@@ -15,38 +25,38 @@ layout(r32f, set = 0, binding = 6) restrict uniform image2DArray coarse_write_te
 layout(r32f, set = 0, binding = 7) restrict readonly uniform image2DArray coarse_read_tex;
 
 layout(push_constant) uniform Params {
-    float deltaTime;
+    float deltaTime; // Time step duration in seconds
 
-    // --- AUTO-INJECTED LAYER INDICES ---
-    int f_growth_rate_modifier; // FLORA layer 0 (GROWTH_RATE_MODIFIER)
-    int f_canopy_shade;          // FLORA layer 1 (CANOPY_SHADE)
-    int f_scent_grasses;         // FAUNA layer 9 (SCENT_FLORA_GRASSES)
-    int f_scent_shrubs;          // FAUNA layer 10 (SCENT_FLORA_SHRUBS)
-    int f_scent_trees;           // FAUNA layer 11 (SCENT_FLORA_TREES)
-    int f_ground_temp;           // LANDSCAPE layer 4 (GROUND_TEMP)
-    int f_air_temp;              // ATMOSPHERE layer 2 (AIR_TEMP)
-    int f_humidity;              // ATMOSPHERE layer 3 (HUMIDITY)
-    int f_sunlight;              // ENERGY layer 0 (SUNLIGHT)
-    int f_liquid_height;         // WATER layer 0 (WATER_LIQUID_HEIGHT)
-    int f_ice_height;            // WATER layer 1 (WATER_ICE_HEIGHT)
+    // Output and read layer indices (float texture array)
+    int f_growth_rate_modifier; // Index of terrestrial growth suitability layer in float texture array
+    int f_canopy_shade;         // Index of tree canopy shade layer in float texture array
+    int f_scent_grasses;        // Index of grass scent trail layer in float texture array
+    int f_scent_shrubs;         // Index of shrub scent trail layer in float texture array
+    int f_scent_trees;          // Index of tree scent trail layer in float texture array
+    int f_ground_temp;          // Index of ground temperature layer in float texture array
+    int f_air_temp;             // Index of air temperature layer in float texture array
+    int f_humidity;             // Index of atmospheric humidity layer in float texture array
+    int f_sunlight;             // Index of solar insolation layer in float texture array
+    int f_liquid_height;        // Index of liquid water depth layer in float texture array
+    int f_ice_height;           // Index of ice thickness layer in float texture array
 
-    int a_grasses;               // FLORA atomic layer 0 (GRASSES)
-    int a_shrubs;                // FLORA atomic layer 1 (SHRUBS)
-    int a_trees_canopy;          // FLORA atomic layer 2 (TREES_CANOPY)
-    int a_aquatic;               // FLORA atomic layer 3 (AQUATIC)
-    int a_flora_detritus;        // FLORA atomic layer 4 (FLORA_DETRITUS)
-    int a_soil_nutrients;        // LANDSCAPE atomic layer 1 (SOIL_NUTRIENTS)
+    // Atomic storage layer indices
+    int a_grasses;        // Index of grass biomass layer in atomic texture array
+    int a_shrubs;         // Index of shrub biomass layer in atomic texture array
+    int a_trees_canopy;   // Index of tree canopy biomass layer in atomic texture array
+    int a_aquatic;        // Index of aquatic flora biomass layer in atomic texture array
+    int a_flora_detritus; // Index of dead plant detritus layer in atomic texture array
+    int a_soil_nutrients; // Index of soil nutrients layer in atomic texture array
 
-    // --- USER PUSH CONSTANTS ---
-    float flora_atomic_multiplier; // e.g. 1000000.0 (FLORA atomic layers)
-    float atomic_multiplier;       // e.g. 100.0 (LANDSCAPE atomic layers, e.g. SOIL_NUTRIENTS)
-    float base_growth_rate;        // e.g. 1.0
-    float dieoff_rate;             // e.g. 0.2
-    float decomposition_rate;      // e.g. 0.1
-    vec2 succ_grass_to_shrub;      // (min_grass, max_grass)
-    vec2 succ_shrub_to_tree;       // (min_shrub, max_shrub)
-    vec2 shrub_competition;        // (shrub_start, shrub_max_penalty)
-    vec2 tree_competition;         // (tree_start, tree_max_penalty)
+    float flora_atomic_multiplier; // Scale factor converting flora biomass float to fixed-point uint
+    float atomic_multiplier;       // Scale factor converting soil nutrients float to fixed-point uint
+    float base_growth_rate;        // Baseline vegetative reproduction and biomass growth multiplier
+    float dieoff_rate;             // Baseline environmental mortality rate
+    float decomposition_rate;      // Rate at which dead detritus breaks down into soil nutrients
+    vec2 succ_grass_to_shrub;      // Grass biomass threshold range (min, max) enabling shrub establishment
+    vec2 succ_shrub_to_tree;       // Shrub biomass threshold range (min, max) enabling tree establishment
+    vec2 shrub_competition;        // Shrub density threshold and maximum growth penalty exerted on grasses
+    vec2 tree_competition;         // Tree density threshold and maximum growth penalty exerted on understory
 } params;
 
 // === BRANCHLESS SPHERICAL COORDINATE WRAPPING ===
@@ -129,61 +139,52 @@ void main() {
     float neighbor_shrub = (float(n_s1) + float(n_s2) + float(n_s3) + float(n_s4)) / params.flora_atomic_multiplier;
     float neighbor_tree  = (float(n_t1) + float(n_t2) + float(n_t3) + float(n_t4)) / params.flora_atomic_multiplier;
 
-    // 4. Environmental Suitability Calculations
+    // 4. Evaluate environmental suitability:
+    // Optimal plant growth occurs near 22°C; drops to 0 below freezing
     float temp = mix(ground_temp, air_temp, 0.5);
-
-    // Temperature Factor: Smooth curve centered around 22°C
     float temp_norm = (temp - 22.0) / 22.0;
     float temp_factor = clamp(1.0 - temp_norm * temp_norm, 0.0, 1.0) * step(0.0, temp);
 
-    // Sunlight Factor (reduced under ice)
+    // Photosynthetic light available through snow and ice cover
     float effective_sunlight = sunlight * clamp(1.0 - ice * 10.0, 0.0, 1.0);
 
-    // Terrestrial Moisture Factor
+    // Terrestrial moisture: requires soil moisture or humidity, but dies if water is too deep
     float soil_moisture = max(liquid, humidity);
     float terrestrial_moisture = clamp(0.5 + soil_moisture * 2.0, 0.5, 1.0) * clamp(2.0 - liquid / 0.3, 0.0, 1.0);
 
-    // Aquatic Moisture Factor
+    // Aquatic moisture: requires standing surface water
     float aquatic_moisture = clamp((liquid - 0.02) / 0.2, 0.0, 1.0);
 
-    // Soil Nutrient Factor
+    // Soil fertility factor based on available nutrient density
     float nutrient_factor = 0.5 + clamp(nutrients / 5.0, 0.0, 1.0);
 
-    // Compute Overall Growth Rate Modifier for Terrestrial Flora [0.0, 1.0]
+    // Composite growth rate modifier for terrestrial plants [0.0, 1.0]
     float growth_modifier = clamp(temp_factor * effective_sunlight * terrestrial_moisture * nutrient_factor, 0.0, 1.0);
 
-    // Compute Canopy Shade Float [0.0, 0.95] from tree density
-    // tree density is normalized around 1.0 (1,000,000 uints)
+    // Canopy shade cast by mature tree foliage [0.0, 0.95]
     float canopy_shade = clamp(trees * 0.95, 0.0, 0.95);
-
-    // Effective sunlight hitting understory flora (grasses & shrubs) after canopy shading
-    // Note: We use dynamic tree_competition for growth now, but we retain canopy_shade for thermodynamic topology drag
     float understory_growth_mod = growth_modifier;
 
-    // 5. Succession & Logistic Growth Calculations
+    // 5. Ecological succession, light competition, and carrying capacity:
     const float SEED_THRESHOLD = 0.005;
     float dt = params.deltaTime;
 
-    // Competition multipliers
-    // Shrub competition penalizes grass (1.0 -> dynamic max penalty)
+    // Competition penalties: mature shrubs shade grasses; tall tree canopies shade both shrubs and grasses
     float grass_from_shrub_mult = mix(1.0, 1.0 - params.shrub_competition.y, smoothstep(params.shrub_competition.x, params.shrub_competition.x + 0.5, shrubs));
-    
-    // Tree competition penalizes both understory layers (1.0 -> dynamic max penalty)
     float understory_from_tree_mult = mix(1.0, 1.0 - params.tree_competition.y, smoothstep(params.tree_competition.x, params.tree_competition.x + 0.5, trees));
 
-    // Combine penalties and apply directly to Carrying Capacity (K) 
-    // This forces shaded flora to die off (dieoff exceeds growth) down to the new lower capacity
+    // Shrinking carrying capacity K under heavy shade forces understory plants to thin out
     float grass_K_mult = grass_from_shrub_mult * understory_from_tree_mult;
     float shrub_K_mult = understory_from_tree_mult;
 
-    // Carrying Capacities (K)
-    float K_grass = understory_growth_mod * 1.0 * grass_K_mult; // Max out at 1.0 (1M uints)
+    // Environmental Carrying Capacities (K) for each vegetative layer
+    float K_grass = understory_growth_mod * 1.0 * grass_K_mult;
     float K_shrub = understory_growth_mod * 3.0 * shrub_K_mult;
     float K_tree = growth_modifier * 5.0; 
     float K_aquatic = temp_factor * effective_sunlight * aquatic_moisture * nutrient_factor * 2.0;
 
-    // Succession multipliers (enable growth of next stage)
-    // Once established (>0.1), they bypass the predecessor requirement to sustain themselves
+    // Succession gates: pioneer grasses create soil stability allowing shrubs to establish;
+    // shrubs subsequently prepare ground for tree seedlings
     float shrub_succession_mult = clamp(
         smoothstep(params.succ_grass_to_shrub.x, params.succ_grass_to_shrub.y, grasses) + 
         smoothstep(0.0, 0.1, shrubs), 0.0, 1.0);
@@ -192,12 +193,11 @@ void main() {
         smoothstep(params.succ_shrub_to_tree.x, params.succ_shrub_to_tree.y, shrubs) + 
         smoothstep(0.0, 0.1, trees), 0.0, 1.0);
 
-    // To ensure the affected species actively recede when shaded, we multiply their dieoff rate
-    // inversely by the remaining carrying capacity multiplier
+    // Shade mortality acceleration: shaded species suffer increased dieoff
     float grass_dieoff_penalty = 1.0 / max(grass_K_mult, 0.1);
     float shrub_dieoff_penalty = 1.0 / max(shrub_K_mult, 0.1);
 
-    // --- Grasses (Terrestrial Pioneer) ---
+    // Pioneer Grasses: logistic growth up to carrying capacity K_grass
     bool can_grass_grow = (grasses > 0.0) || (neighbor_grass > SEED_THRESHOLD);
     float grass_growth = 0.0;
     if (can_grass_grow && K_grass > 0.001) {
@@ -207,7 +207,7 @@ void main() {
     }
     float grass_dieoff = grasses * (step(0.4, liquid) + step(temp, -2.0) * 0.5 + (1.0 - temp_factor) * 0.1) * params.dieoff_rate * grass_dieoff_penalty * dt;
 
-    // --- Shrubs ---
+    // Shrubs: secondary succession species
     bool can_shrub_grow = (shrubs > 0.0) || (grasses > params.succ_grass_to_shrub.x) || (neighbor_shrub > SEED_THRESHOLD);
     float shrub_growth = 0.0;
     if (can_shrub_grow && K_shrub > 0.001) {
@@ -217,7 +217,7 @@ void main() {
     }
     float shrub_dieoff = shrubs * (step(0.4, liquid) + step(temp, -5.0) * 0.5 + (1.0 - temp_factor) * 0.1) * params.dieoff_rate * shrub_dieoff_penalty * dt;
 
-    // --- Trees Canopy ---
+    // Tree Canopy: climax succession species
     bool can_tree_grow = (trees > 0.0) || (shrubs > params.succ_shrub_to_tree.x) || (neighbor_tree > SEED_THRESHOLD);
     float tree_growth = 0.0;
     if (can_tree_grow && K_tree > 0.001) {
@@ -227,13 +227,11 @@ void main() {
     }
     float tree_dieoff = trees * (step(0.5, liquid) + step(temp, -10.0) * 0.5 + (1.0 - temp_factor) * 0.05) * params.dieoff_rate * dt;
 
-    // --- Aquatic Flora ---
+    // Aquatic Flora: algae and water plants
     bool can_aquatic_grow = (aquatic > 0.0) || (aquatic_moisture > 0.1);
     float aquatic_growth = 0.0;
     if (can_aquatic_grow && K_aquatic > 0.001) {
         float N_a = max(aquatic, 0.005);
-        // NOTE: K_aquatic already computes (temp_factor * effective_sunlight * aquatic_moisture * nutrient_factor * 2.0),
-        //       so we reuse it here rather than recalculating the product.
         float r_a = params.base_growth_rate * (K_aquatic * 0.5);
         aquatic_growth = r_a * N_a * max(1.0 - (aquatic / K_aquatic), 0.0) * dt;
     }
@@ -245,11 +243,11 @@ void main() {
 
     float nutrient_consumed = min(nutrients, total_growth * 0.1);
 
-    // Detritus Decomposition into Soil Nutrients
+    // Detritus decomposition into soil nutrients: warmth and moisture accelerate microbial decay
     float decomp_factor = temp_factor * clamp(liquid + 0.1, 0.1, 1.0);
     float detritus_decomposed = min(detritus, detritus * decomp_factor * params.decomposition_rate * dt);
 
-    // 6. Atomic Transactions
+    // 6. Compute net biomass balance and apply underflow-guarded atomic updates
     int d_grass = int(round((grass_growth - grass_dieoff) * params.flora_atomic_multiplier));
     int d_shrubs = int(round((shrub_growth - shrub_dieoff) * params.flora_atomic_multiplier));
     int d_trees = int(round((tree_growth - tree_dieoff) * params.flora_atomic_multiplier));
@@ -275,7 +273,7 @@ void main() {
     if (d_nutrients < 0) d_nutrients = -int(min(uint(-d_nutrients), u_nutrients));
     if (d_nutrients != 0) imageAtomicAdd(atomic_tex, ivec3(id, params.a_soil_nutrients), uint(d_nutrients));
 
-    // 7. Write Float Grid Outputs (to write_tex, Binding 0)
+    // 7. Store growth suitability, canopy shade, and biological scent markers in the float texture array
     imageStore(write_tex, ivec3(id, params.f_growth_rate_modifier), vec4(growth_modifier, 0.0, 0.0, 0.0));
     imageStore(write_tex, ivec3(id, params.f_canopy_shade), vec4(canopy_shade, 0.0, 0.0, 0.0));
     imageStore(write_tex, ivec3(id, params.f_scent_grasses), vec4(clamp(grasses, 0.0, 1.0), 0.0, 0.0, 0.0));

@@ -29,11 +29,9 @@ layout(r32f, set = 0, binding = 7) restrict readonly uniform image2DArray coarse
 // Enable the matching flag on the LayerSimulator resource in the inspector.
 //
 /*
-// Binding 8: RETIRED (plan §8.4). The EventBuffer carried the frozen geothermal
-// POC's events until the biome economy path was proven; it is now decommissioned
-// and bindings 8/9 are FREE for future aux SSBOs. Biome causation does NOT use
-// an event stream — it rides in the BIOME_TYPE texel's 24-bit attribution
-// snapshot (event plan §2.1), which the CPU reads via snapshot diffing.
+// Binding 8: RETIRED. Former EventBuffer decommissioned; bindings 8/9 are FREE
+// for future auxiliary SSBOs. Biome causation travels in the BIOME_TYPE texel's
+// 24-bit attribution snapshot, which the CPU reads via periodic snapshot diffing.
 //
 // Historical contract, kept for reference (matches EVENT_DATA_BYTE_SIZE):
 // struct EventData { uint source_id; uint packed_data; vec2 world_pos; };
@@ -73,11 +71,11 @@ layout(std430, set = 0, binding = 10) restrict readonly buffer SpellBook {
 /*
 // Binding 12: ImpactCurrency (uses_impact_currency = true)
 // GPU writes via atomicAdd; CPU reads async and swaps.
-// Double-buffered ping-pong (plan §2.7): the CPU extracts the ACTIVE half,
-// swaps immediately via GpuWorldState.swap_impact_currency(), then zeroes the
-// extracted half in the callback; GPU atomicAdds always land in the active
-// half, so no add is ever destroyed by the CPU reset window. Agents aggregate
-// per-workgroup via `shared` memory and issue ONE atomicAdd per workgroup
+// Double-buffered ping-pong: the CPU extracts the ACTIVE half, swaps immediately
+// via GpuWorldState.swap_impact_currency(), then zeroes the extracted half in the
+// callback; GPU atomicAdds always land in the active half, so no add is destroyed
+// by the CPU reset window. Agents aggregate per-workgroup via `shared` memory and
+// issue ONE atomicAdd per workgroup (never per-thread).
 // (never per-thread).
 layout(std430, set = 0, binding = 12) restrict buffer ImpactCurrency {
     uint total_currency;       // offset 0 — atomicAdd target

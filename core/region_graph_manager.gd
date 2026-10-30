@@ -1,55 +1,51 @@
 extends Node
+## Maintains the contiguous 4-connected `SimulationRegion` graph across the biome
+## grid, handling bootstrap Connected Component Labeling, incremental cell transitions,
+## seniority merges, anchor-reachability splits, procedural naming, and `AeonLog` milestones.
 class_name RegionGraphManager
 
-## Maintains the persistent SimulationRegion graph over the biome grid
-## (_planning/event_logging_system_plan.md §3.3/§3.4/§5.1).
-##
-## Data layout (§3.2, perf-critical): the PRIMARY lookup is the flat
-## `cell_to_region` PackedInt32Array (O(1) index math, cache-friendly);
-## per-region `cells` Dictionaries are retained only for membership/centroid
-## bookkeeping and emptied on merge/archive.
-##
-## Consumption: connect `GameStateManager.biome_snapshot_manager`
-## .transitions_resolved -> `on_transitions_resolved`. Batches arriving while
-## a split job is in flight are buffered (mutation queue) and replayed after
-## the job commits (§3.4 concurrency contract). Per-cell mutation guards
-## discard stale split jobs whose region has since merged or dissolved.
-##
-## Worker discipline (§3.4): exactly two kinds of worker work ever exist —
-## the one-time initial CCL at bootstrap and anchor-reachability split
-## contests. The periodic reconcile pass from the superseded design is
-## DELETED: snapshot diffing cannot drift.
-
+## Emitted when a pending `SimulationRegion` reaches `CHRISTEN_THRESHOLD` cells and receives a name.
 signal region_named(region : SimulationRegion)
+## Emitted once bootstrap Connected Component Labeling finishes building the initial region graph.
 signal graph_rebuilt(region_count : int)
 
-const CHRISTEN_THRESHOLD : int = 5           # cells; §5.1 pending churn suppression
-const GROWTH_THRESHOLDS_KM2 : Array[float] = [10000.0, 50000.0]  # §5.1
+## Minimum cell count required before a pending region is christened and logged in `AeonLog`.
+const CHRISTEN_THRESHOLD : int = 5
+## Surface-area milestones in square kilometers that trigger one-shot growth entries in `AeonLog`.
+const GROWTH_THRESHOLDS_KM2 : Array[float] = [10000.0, 50000.0]
 
-var regions : Dictionary = {}            # int id -> SimulationRegion
-var cell_to_region : PackedInt32Array = PackedInt32Array()  # cell idx -> region id (-1 = none)
-var cell_area_km2 : float = 0.0          # derived from WorldConfig once (§3.2)
+## Active `SimulationRegion` instances keyed by their permanent integer `id`.
+var regions : Dictionary = {}
+## Contiguous SoA lookup mapping each flat `cell_index` to its owning `SimulationRegion.id` (`-1` if none).
+var cell_to_region : PackedInt32Array = PackedInt32Array()
+## Equatorial surface area of a single grid cell in square kilometers, derived from `WorldConfig.planetary_diameter`.
+var cell_area_km2 : float = 0.0
+## Monotonically increasing counter assigning unique IDs to newly created `SimulationRegion` instances.
 var next_region_id : int = 1
+## Chronicle instance receiving regional birth, growth, merge, split, and extinction milestones.
 var aeon_log : AeonLog
+## Procedural name generator minting fresh and derived region names.
 var name_generator : RegionNameGenerator
 
-## True while the bootstrap CCL is rediscovering a LOADED world: regions are
-## being found, not born, so Birth entries are suppressed (survey, not birth).
-## Set by GameStateManager before build_from_shadow; cleared on the first
-## diff-batch commit (sim-driven births resume normally).
+## When true during a loaded-world bootstrap, suppresses `log_birth` entries and seeds `last_growth_threshold` to current area.
 var suppress_bootstrap_births : bool = false
 
-# --- §3.4 concurrency contract state ---
+## True while an asynchronous split-contest worker task is in flight.
 var _job_in_flight : bool = false
-var _mutation_queue : Array[Array] = []  # buffered transition batches
-var _split_generation : int = 0          # guards stale split-job commits
-var _pending_split_checks : Dictionary = {}  # cell_idx -> true (cells whose flip queued a job)
+## FIFO queue of transition batches buffered while `_job_in_flight` is true.
+var _mutation_queue : Array[Array] = []
+## Monotonically increasing counter guarding against commits from stale worker tasks.
+var _split_generation : int = 0
+## Set of cell indices whose detachment queued a pending split check.
+var _pending_split_checks : Dictionary = {}
 
-# world dims (captured at bind time)
+## Bound world grid width in cells.
 var _width : int = 0
+## Bound world grid height in cells.
 var _height : int = 0
 
 
+## Ensures default `AeonLog` and `RegionNameGenerator` instances exist when entering the scene tree.
 func _ready() -> void:
 	if aeon_log == null:
 		aeon_log = AeonLog.new()
@@ -57,8 +53,9 @@ func _ready() -> void:
 		name_generator = RegionNameGenerator.new()
 
 
-## Wires the graph to a world; recomputes cell area from WorldConfig (§3.2).
+## Resets the region graph for a `width * height` grid and computes `cell_area_km2` from `WorldConfig.planetary_diameter`.
 func bind(width : int, height : int) -> void:
+	# Initialize grid dimensions, default helper instances, and the flat `cell_to_region` SoA lookup.
 	_width = width
 	_height = height
 	if aeon_log == null:
@@ -73,8 +70,7 @@ func bind(width : int, height : int) -> void:
 	_mutation_queue.clear()
 	_pending_split_checks.clear()
 	_split_generation += 1
-	# Cell area: equatorial cell (plan §3.2). WorldConfig may be absent in
-	# test harnesses — fall back to the Earth-default diameter.
+	# Compute single-cell equatorial surface area in square kilometers from planetary diameter.
 	var diameter : float = 12742.0
 	if GameStateManager.world_config:
 		diameter = GameStateManager.world_config.planetary_diameter
@@ -82,11 +78,7 @@ func bind(width : int, height : int) -> void:
 	cell_area_km2 = equator_span * (equator_span * 0.5)
 
 
-## ============================================================================
-## BOOTSTRAP: one-time Connected Component Labeling (§3.4) — the only full
-## labeling pass in the system's lifetime. Runs on WorkerThreadPool over the
-## snapshot manager's shadow; regions are named from ground truth.
-## ============================================================================
+## Binds the graph to `width * height` and dispatches the one-time Connected Component Labeling worker on `shadow`.
 func build_from_shadow(shadow : PackedInt32Array, width : int, height : int) -> void:
 	bind(width, height)
 	_split_generation += 1
@@ -94,9 +86,7 @@ func build_from_shadow(shadow : PackedInt32Array, width : int, height : int) -> 
 	WorkerThreadPool.add_task(_ccl_worker.bind(shadow.duplicate(), gen))
 
 
-## The CCL body, shared by the worker (production) and synchronous tests.
-## Commits each discovered component through `_commit_region` immediately when
-## `defer_commits` is false (single-threaded harness path).
+## Floods 4-connected same-biome components across `shadow` and commits each discovered region.
 func _run_ccl(shadow : PackedInt32Array, gen : int, defer_commits : bool) -> void:
 	var id_mask : int = Helpers.BIOME_TEXEL_ID_MASK
 	var max_valid : int = Helpers.BIOME_MAX_VALID_ID
@@ -107,28 +97,27 @@ func _run_ccl(shadow : PackedInt32Array, gen : int, defer_commits : bool) -> voi
 	var stack : PackedInt32Array = PackedInt32Array()
 	var next_label : int = 0
 
+	# Scan every cell and launch a 4-connected BFS flood for each unvisited classified cell.
 	for start : int in count:
 		if labels[start] != -1:
 			continue
 		var biome : int = shadow[start] & id_mask
 		if biome > max_valid:
-			labels[start] = -2  # unclassified: no region
+			labels[start] = -2
 			continue
-		# BFS flood of this component.
 		next_label += 1
 		stack.clear()
 		stack.append(start)
 		labels[start] = next_label
 		var members : PackedInt32Array = PackedInt32Array()
 		members.append(start)
+		# Expand across East/West wrapped and North/South clamped orthogonal neighbors of the same biome.
 		while not stack.is_empty():
 			var idx : int = stack[stack.size() - 1]
 			stack.resize(stack.size() - 1)
 			var x : int = idx % _width
 			@warning_ignore("integer_division")
 			var y : int = idx / _width
-			# 4-neighbors with x wrap; y clamped (unclassified bands terminate
-			# regions; pole rows have no crossover peers beyond the grid).
 			var n : Array[int] = [
 				y * _width + ((x + 1) % _width),
 				y * _width + ((x - 1 + _width) % _width),
@@ -143,12 +132,14 @@ func _run_ccl(shadow : PackedInt32Array, gen : int, defer_commits : bool) -> voi
 					labels[nidx] = next_label
 					stack.append(nidx)
 					members.append(nidx)
+		# Commit the discovered component either deferred to the main thread or immediately in synchronous tests.
 		if defer_commits:
 			_commit_region.call_deferred(members, biome, gen)
 		else:
 			_commit_region(members, biome, gen)
 
 
+## Worker entry point that runs `_run_ccl` and defers `_ccl_done` to the main thread.
 func _ccl_worker(shadow : PackedInt32Array, gen : int) -> void:
 	if gen != _split_generation:
 		return
@@ -156,9 +147,11 @@ func _ccl_worker(shadow : PackedInt32Array, gen : int) -> void:
 	_ccl_done.call_deferred(gen)
 
 
+## Registers a labeled component's cells into a new `SimulationRegion` and christens it if at least `CHRISTEN_THRESHOLD` cells.
 func _commit_region(members : PackedInt32Array, biome : int, gen : int) -> void:
 	if gen != _split_generation or members.is_empty():
 		return
+	# Create the region, populate `cell_to_region` and centroid sums, and christen if large enough.
 	var region : SimulationRegion = _create_region(biome, 0)
 	for idx : int in members:
 		cell_to_region[idx] = region.id
@@ -171,32 +164,31 @@ func _commit_region(members : PackedInt32Array, biome : int, gen : int) -> void:
 		_christen(region, "")
 
 
+## Emits `graph_rebuilt` on the main thread once all bootstrap CCL regions have been committed.
 func _ccl_done(gen : int) -> void:
 	if gen != _split_generation:
 		return
 	graph_rebuilt.emit(regions.size())
 
 
-# ============================================================================
-## DIFF BATCH CONSUMPTION (§3.3)
-# ============================================================================
+## Applies `transitions` immediately or buffers them in `_mutation_queue` if a split worker is currently in flight.
 func on_transitions_resolved(transitions : Array) -> void:
 	if _job_in_flight:
-		# §3.4: buffer, don't interleave. Re-applied after the job commits.
 		_mutation_queue.append(transitions)
 		return
 	_apply_transitions(transitions)
 
 
+## Detaches each transitioned cell from its old region, attaches it to its new biome region, and schedules split checks.
 func _apply_transitions(transitions : Array) -> void:
-	suppress_bootstrap_births = false   # sim-driven births resume after load
-	var split_candidates : Dictionary = {}  # region_id -> true
+	suppress_bootstrap_births = false
+	var split_candidates : Dictionary = {}
 	for transition : BiomeTransitionRecord in transitions:
 		var cell_index : int = transition.cell_index
 		var new_biome : int = transition.new_biome
 		var old_region_id : int = cell_to_region[cell_index]
 
-		# 1. Detach from old region (§3.3 flow).
+		# Detach the cell from its previous region and mark the region extinct or a split candidate.
 		if old_region_id != -1 and regions.has(old_region_id):
 			var old_region : SimulationRegion = regions[old_region_id]
 			_detach_cell(old_region, cell_index)
@@ -205,14 +197,13 @@ func _apply_transitions(transitions : Array) -> void:
 			elif not _job_in_flight and _needs_split_check(old_region, cell_index):
 				split_candidates[old_region_id] = true
 
-		# 2. Attach to new biome (§3.3.1): inspect 4 orthogonal neighbors,
-		#    spherical wrap; join a matching region or seed a new one.
+		# Attach the cell to an adjacent matching region or seed a new pending region.
 		_attach_cell(cell_index, new_biome)
 
-	# 3. Severing: O(1) gates first; genuine bridge-cuts go async (§3.3.3).
+	# Evaluate split candidates that survived all merges and detachments in this batch.
 	for region_id : int in split_candidates:
 		if not regions.has(region_id):
-			continue  # merged/dissolved since the guard snapshot
+			continue
 		var region : SimulationRegion = regions[region_id]
 		if region.cells.is_empty():
 			continue
@@ -221,9 +212,7 @@ func _apply_transitions(transitions : Array) -> void:
 	_flush_growth_milestones()
 
 
-# ============================================================================
-## CELL MEMBERSHIP PRIMITIVES
-# ============================================================================
+## Removes `cell_index` from `region`, decrements its centroid accumulators, and clears `cell_to_region[cell_index]`.
 func _detach_cell(region : SimulationRegion, cell_index : int) -> void:
 	region.cells.erase(cell_index)
 	region.sum_x -= cell_index % _width
@@ -232,13 +221,13 @@ func _detach_cell(region : SimulationRegion, cell_index : int) -> void:
 	cell_to_region[cell_index] = -1
 
 
+## Joins `cell_index` to an orthogonal neighbor region of matching `biome` (merging multiple matches by seniority) or seeds a new region.
 func _attach_cell(cell_index : int, biome : int) -> void:
 	var x : int = cell_index % _width
 	@warning_ignore("integer_division")
 	var y : int = cell_index / _width
-	# 4 orthogonal neighbors with spherical X-wrap and Y-clamp (Model B: the
-	# outermost rows are the pole cells themselves; there is nothing beyond).
-	var neighbor_ids : Dictionary = {}  # region id -> true (dedupe)
+	# Collect distinct orthogonal neighbor region IDs that share `biome`.
+	var neighbor_ids : Dictionary = {}
 	var neighbor_cells : Array[int] = [
 		y * _width + ((x + 1) % _width),
 		y * _width + ((x - 1 + _width) % _width),
@@ -250,13 +239,14 @@ func _attach_cell(cell_index : int, biome : int) -> void:
 		if nid != -1 and regions.has(nid) and regions[nid].biome_type == biome:
 			neighbor_ids[nid] = true
 
+	# Seed a new region when no orthogonal neighbor shares `biome`.
 	if neighbor_ids.is_empty():
 		var region : SimulationRegion = _create_region(biome, GameStateManager.elapsed_years)
 		_add_cell_to_region(region, cell_index)
 		_maybe_christen(region)
 		return
 
-	# Join exactly one; MERGE any additional matches (§3.3.2 seniority).
+	# Attach the cell to the first matching neighbor region and merge any additional matching neighbors into it.
 	var chosen_id : int = neighbor_ids.keys()[0]
 	var chosen : SimulationRegion = regions[chosen_id]
 	_add_cell_to_region(chosen, cell_index)
@@ -268,6 +258,7 @@ func _attach_cell(cell_index : int, biome : int) -> void:
 	_maybe_christen(chosen)
 
 
+## Adds `cell_index` to `region`, updates `cell_to_region` and centroid sums, and updates `total_cells_peak`.
 func _add_cell_to_region(region : SimulationRegion, cell_index : int) -> void:
 	region.cells[cell_index] = true
 	region.sum_x += cell_index % _width
@@ -278,6 +269,7 @@ func _add_cell_to_region(region : SimulationRegion, cell_index : int) -> void:
 		region.total_cells_peak = region.cells.size()
 
 
+## Allocates and registers a new pending `SimulationRegion` with a unique `id`.
 func _create_region(biome : int, founding_year : int) -> SimulationRegion:
 	var region : SimulationRegion = SimulationRegion.new()
 	region.id = next_region_id
@@ -288,22 +280,21 @@ func _create_region(biome : int, founding_year : int) -> SimulationRegion:
 	return region
 
 
+## Logs extinction in `aeon_log` if `region` was christened and removes it from `regions`.
 func _extinct_region(region : SimulationRegion) -> void:
 	if not region.is_pending:
 		aeon_log.log_extinction(region.region_name)
 	regions.erase(region.id)
 
 
-# ============================================================================
-## SENIORITY MERGING (§3.3.2)
-# ============================================================================
+## Absorbs the smaller region into the larger region by cell count, transferring cells and centroid sums additively.
 func _merge_regions(senior : SimulationRegion, junior : SimulationRegion) -> SimulationRegion:
-	# The Seniority Rule: the LARGER region absorbs the smaller.
+	# Swap references if `junior` has more cells so `senior` is always the larger surviving region.
 	if junior.cells.size() > senior.cells.size():
 		var swap : SimulationRegion = senior
 		senior = junior
 		junior = swap
-	# Centroid sums transfer additively — the anchor stays valid (§3.3.2).
+	# Transfer all member cells and centroid accumulators from `junior` into `senior`.
 	for cell_index : int in junior.cells:
 		senior.cells[cell_index] = true
 		cell_to_region[cell_index] = senior.id
@@ -311,6 +302,7 @@ func _merge_regions(senior : SimulationRegion, junior : SimulationRegion) -> Sim
 	senior.sum_y += junior.sum_y
 	if senior.cells.size() > senior.total_cells_peak:
 		senior.total_cells_peak = senior.cells.size()
+	# Log absorption if the absorbed region was already christened, then remove it from `regions`.
 	if not junior.is_pending:
 		aeon_log.log_absorption(junior.region_name, senior.region_name)
 	regions.erase(junior.id)
@@ -318,22 +310,14 @@ func _merge_regions(senior : SimulationRegion, junior : SimulationRegion) -> Sim
 	return senior
 
 
-# ============================================================================
-## SEVERING (§3.3.3): Stage 1 O(1) gates -> Stage 2 async anchor contest
-# ============================================================================
-## Gate 1 (degree) + Gate 2 (ring test) run on the main thread; almost every
-## flip stops here. Returns true if the region is provably still connected OR
-## trivially severed (0/1/multi neighbors), false only for a genuine bridge
-## cut that needs the async contest.
+## Returns true if `detached_cell` had at least two orthogonal neighbors belonging to `region`, indicating a potential pinch point.
 func _needs_split_check(region : SimulationRegion, detached_cell : int) -> bool:
 	if region.cells.size() <= 1:
 		return false
 	var x : int = detached_cell % _width
 	@warning_ignore("integer_division")
 	var y : int = detached_cell / _width
-	# Count this region's members among the 4 neighbors of the detached cell
-	# (pre-detach membership was captured by the caller BEFORE detaching —
-	# here we run AFTER, so neighbors still in the region are the contest set).
+	# Count how many of `detached_cell`'s 4 orthogonal neighbors still belong to `region`.
 	var region_neighbors : Array[int] = []
 	var ring_cells : Array[int] = [
 		y * _width + ((x + 1) % _width),
@@ -345,22 +329,15 @@ func _needs_split_check(region : SimulationRegion, detached_cell : int) -> bool:
 		if cell_to_region[nidx] == region.id:
 			region_neighbors.append(nidx)
 	var degree : int = region_neighbors.size()
-	# 0 -> region died (handled by extinction). 1 -> no severing possible.
-	# 2+ different regions -> the caller per-flip flow already ensured the
-	# detached cell belonged to THIS region only, so 2+ members here are all
-	# the same region; they may form a pinch point.
 	return degree >= 2
 
 
-## Ring test (§3.3.3 stage 1 gate 2): if the region's neighbours of the cut
-## are mutually adjacent around the ring, the region is provably still
-## connected and no search runs.
+## Returns true if any pair of cells in `ring_members` is directly adjacent on the grid.
 func _ring_test(_region : SimulationRegion, ring_members : Array[int]) -> bool:
 	var member_set : Dictionary = {}
 	for idx : int in ring_members:
 		member_set[idx] = true
-	# Pairwise adjacency among the <=4 members (with wrap): if ANY two are
-	# direct neighbors, the two sides connect around the cut cell.
+	# Check pairwise adjacency across the ring subset.
 	for a : int in ring_members:
 		for b : int in ring_members:
 			if a >= b:
@@ -370,6 +347,7 @@ func _ring_test(_region : SimulationRegion, ring_members : Array[int]) -> bool:
 	return false
 
 
+## Returns true if flat cell indices `a` and `b` are 4-connected neighbors (with East-West wrapping).
 func _are_adjacent(a : int, b : int) -> bool:
 	var ax : int = a % _width
 	@warning_ignore("integer_division")
@@ -382,20 +360,17 @@ func _are_adjacent(a : int, b : int) -> bool:
 	return dx + dy == 1
 
 
+## Runs a synchronous connectivity check for small regions (`< 64` cells) or dispatches `_split_worker` for larger regions.
 func _maybe_enqueue_split(region : SimulationRegion) -> void:
-	# Ring test over the region's neighbors of every recent cut is implicit:
-	# the cheap sufficient test is "is the region still 4-connected?" via a
-	# bounded main-thread probe from the largest member cluster — but the plan
-	# specifies anchor-reachability on the WORKER for genuine bridge cuts.
-	# Main-thread cheap pre-gate: if the region is small enough (< 64 cells),
-	# flood-fill synchronously (cheaper than a job round-trip).
+	# Handle small regions synchronously on the main thread to avoid worker task overhead.
 	if region.cells.size() < 64:
 		if _is_connected(region):
 			return
 		_sever_synchronous(region)
 		return
+	# Dispatch an asynchronous anchor-reachability contest for larger regions if no worker is in flight.
 	if _job_in_flight:
-		return  # in-flight gating (§3.4); the next batch re-checks
+		return
 	var anchor : int = _derive_anchor(region)
 	if anchor == -1:
 		return
@@ -406,11 +381,12 @@ func _maybe_enqueue_split(region : SimulationRegion) -> void:
 	WorkerThreadPool.add_task(_split_worker.bind(region.id, membership, anchor, gen))
 
 
-## Lazy centroid anchor (§3.2/§3.3.3): the member cell nearest the mean.
+## Returns the member cell index in `region` closest to its `(sum_x / count, sum_y / count)` centroid, or `-1` if empty.
 func _derive_anchor(region : SimulationRegion) -> int:
 	var count : int = region.cells.size()
 	if count == 0:
 		return -1
+	# Compute the mean coordinate and find the member cell with minimum squared Euclidean distance.
 	var mean_x : float = float(region.sum_x) / float(count)
 	var mean_y : float = float(region.sum_y) / float(count)
 	var best : int = -1
@@ -427,10 +403,11 @@ func _derive_anchor(region : SimulationRegion) -> int:
 	return best
 
 
-## Synchronous flood for small regions (below the job threshold).
+## Returns true if all cells in `region` belong to a single 4-connected component.
 func _is_connected(region : SimulationRegion) -> bool:
 	if region.cells.size() <= 1:
 		return true
+	# Flood-fill from the first member cell and verify every member cell is reached.
 	var start : int = region.cells.keys()[0]
 	var visited : Dictionary = {start: true}
 	var stack : Array[int] = [start]
@@ -443,14 +420,13 @@ func _is_connected(region : SimulationRegion) -> bool:
 	return visited.size() == region.cells.size()
 
 
+## Splits a disconnected small `region` synchronously into connected fragments and registers daughter regions.
 func _sever_synchronous(region : SimulationRegion) -> void:
 	var fragments : Array = _fragment_region(region)
 	_apply_fragments(region, fragments)
 
 
-## Worker (§3.3.3 stage 2): snapshot contest. Each side searches for a path to
-## the anchor through same-region cells only; the first flood's visited set IS
-## the severed fragment's membership — no discovery cost is paid twice.
+## Floods `membership` from `anchor` on a worker thread, collects any unreached disconnected fragments, and defers `_split_commit`.
 func _split_worker(region_id : int, membership : PackedInt32Array, anchor : int, gen : int) -> void:
 	if gen != _split_generation:
 		return
@@ -458,11 +434,9 @@ func _split_worker(region_id : int, membership : PackedInt32Array, anchor : int,
 	for idx : int in membership:
 		member_set[idx] = true
 	if not member_set.has(anchor):
-		# Anchor changed biome between enqueue and run — region intact or gone;
-		# commit path discards if the region id no longer resolves.
 		_split_commit.call_deferred(region_id, [], gen)
 		return
-	# Flood from the anchor.
+	# Flood-fill all member cells reachable from `anchor`.
 	var reached : Dictionary = {anchor: true}
 	var stack : Array[int] = [anchor]
 	while not stack.is_empty():
@@ -473,9 +447,9 @@ func _split_worker(region_id : int, membership : PackedInt32Array, anchor : int,
 				stack.append(nidx)
 	var fragments : Array[PackedInt32Array] = []
 	if reached.size() == member_set.size():
-		_split_commit.call_deferred(region_id, fragments, gen)  # intact
+		_split_commit.call_deferred(region_id, fragments, gen)
 		return
-	# Severed: every unreached member belongs to lost fragment(s). Flood each.
+	# Flood-fill each disconnected component among the unreached member cells.
 	var lost : Dictionary = {}
 	for idx : int in member_set:
 		if reached.has(idx):
@@ -499,6 +473,7 @@ func _split_worker(region_id : int, membership : PackedInt32Array, anchor : int,
 	_split_commit.call_deferred(region_id, fragments, gen)
 
 
+## Returns the 4-connected neighbors of `idx` that are present in `member_set`.
 func _neighbors_snapshot(idx : int, member_set : Dictionary) -> Array[int]:
 	var result : Array[int] = []
 	for nidx : int in _neighbors_of(idx):
@@ -507,22 +482,19 @@ func _neighbors_snapshot(idx : int, member_set : Dictionary) -> Array[int]:
 	return result
 
 
-## Main-thread commit (§3.3.3 step 7): daughters keep the parent's exact name
-## on the anchor side; each >= threshold daughter is christened with a derived
-## name; interim transitions replay against the committed result afterwards.
+## Commits an asynchronous split on the main thread, creating daughter regions for severed fragments and replaying `_mutation_queue`.
 func _split_commit(region_id : int, fragments : Array, gen : int) -> void:
 	if gen != _split_generation:
 		return
 	_job_in_flight = false
 	if not regions.has(region_id):
-		return  # stale job: region merged/dissolved while the job ran (§3.4)
+		return
 	if fragments.is_empty():
 		_flush_growth_milestones()
 		_replay_mutation_queue()
 		return
 	var parent : SimulationRegion = regions[region_id]
-	# Anchor-side keeps id + exact name even if not strictly largest ("the
-	# heart persists"). The anchor is recomputed against CURRENT membership.
+	# Detach severed fragments from `parent` and create daughter regions for each fragment.
 	var anchor : int = _derive_anchor(parent)
 	var anchor_fragment_idx : int = -1
 	for f : int in fragments.size():
@@ -531,11 +503,7 @@ func _split_commit(region_id : int, fragments : Array, gen : int) -> void:
 			anchor_fragment_idx = f
 			break
 	if anchor_fragment_idx != -1:
-		# Anchor sits in a lost fragment: that fragment keeps the identity,
-		# the remaining cells (current parent membership minus lost) become
-		# the daughters' parent body.
 		var anchor_frag : PackedInt32Array = fragments[anchor_fragment_idx]
-		# Remove anchor fragment cells from the parent.
 		for idx : int in anchor_frag:
 			_detach_cell(parent, idx)
 	var daughters : PackedStringArray = PackedStringArray()
@@ -551,7 +519,7 @@ func _split_commit(region_id : int, fragments : Array, gen : int) -> void:
 			var siblings : PackedStringArray = PackedStringArray(daughters)
 			_christen(daughter, parent.region_name, siblings)
 			daughters.append(daughter.region_name)
-	# Parent survives only if it still has cells; otherwise it is extinct.
+	# Mark `parent` extinct if empty, or log the severing milestone and replay queued transition batches.
 	if parent.cells.is_empty():
 		_extinct_region(parent)
 	else:
@@ -562,8 +530,9 @@ func _split_commit(region_id : int, fragments : Array, gen : int) -> void:
 	_replay_mutation_queue()
 
 
+## Partitions all cells of `region` into 4-connected `PackedInt32Array` components and clears `region` from the graph.
 func _fragment_region(region : SimulationRegion) -> Array:
-	# Flood-fill all components of the region's remaining membership.
+	# Flood-fill every connected component among `region.cells`.
 	var fragments : Array = []
 	var seen : Dictionary = {}
 	for start : int in region.cells:
@@ -581,13 +550,14 @@ func _fragment_region(region : SimulationRegion) -> Array:
 					fragment.append(nidx)
 					stack.append(nidx)
 		fragments.append(fragment)
-	# Clear the parent's bookkeeping; fragments are re-registered by caller.
+	# Remove the original region registration before the caller rebuilds fragments.
 	regions.erase(region.id)
 	for idx : int in region.cells:
 		cell_to_region[idx] = -1
 	return fragments
 
 
+## Rebuilds the first fragment in `fragments` with `parent`'s identity and creates daughter regions for remaining fragments.
 func _apply_fragments(parent : SimulationRegion, fragments : Array) -> void:
 	var daughters : PackedStringArray = PackedStringArray()
 	var parent_name : String = parent.region_name
@@ -595,8 +565,7 @@ func _apply_fragments(parent : SimulationRegion, fragments : Array) -> void:
 		var fragment : PackedInt32Array = fragments[f]
 		if fragment.is_empty():
 			continue
-		# The largest fragment keeps the parent identity in the synchronous
-		# path (no anchor contest ran); the rest are daughters.
+		# Preserve `parent`'s name and metadata on the primary fragment.
 		if f == 0:
 			var rebuilt : SimulationRegion = _create_region(parent.biome_type, parent.founding_year)
 			rebuilt.region_name = parent_name
@@ -606,6 +575,7 @@ func _apply_fragments(parent : SimulationRegion, fragments : Array) -> void:
 			for idx : int in fragment:
 				_add_cell_to_region(rebuilt, idx)
 			continue
+		# Register subsequent fragments as daughter regions and christen those meeting `CHRISTEN_THRESHOLD`.
 		var daughter : SimulationRegion = _create_region(parent.biome_type, GameStateManager.elapsed_years)
 		daughter.parent_region_name = parent_name
 		for idx : int in fragment:
@@ -620,6 +590,7 @@ func _apply_fragments(parent : SimulationRegion, fragments : Array) -> void:
 	_replay_mutation_queue()
 
 
+## Returns the 4 orthogonal neighbor cell indices of `idx` with East-West wrapping and North-South pole clamping.
 func _neighbors_of(idx : int) -> Array[int]:
 	var x : int = idx % _width
 	@warning_ignore("integer_division")
@@ -633,31 +604,25 @@ func _neighbors_of(idx : int) -> Array[int]:
 	return result
 
 
-# ============================================================================
-## NAMING & MILESTONES (§5.1)
-# ============================================================================
+## Christens `region` with a fresh procedural name if it has reached `CHRISTEN_THRESHOLD` cells.
 func _maybe_christen(region : SimulationRegion) -> void:
 	if region.cells.size() >= CHRISTEN_THRESHOLD:
 		_christen(region, "")
 
 
-## Christens a pending region once. Once christened, ALWAYS christened (§5.1):
-## re-crossing the threshold never re-logs Birth. `parent_name` non-empty
-## derives a daughter name with sibling uniqueness; empty mints fresh.
+## Assigns a fresh or derived procedural name to a pending `region`, logs its birth in `aeon_log`, and emits `region_named`.
 func _christen(region : SimulationRegion, parent_name : String, siblings : PackedStringArray = PackedStringArray()) -> void:
 	if not region.is_pending:
 		return
+	# Mint a fresh name for seed regions or a relational daughter name for split fragments.
 	if parent_name.is_empty():
 		region.region_name = name_generator.mint_fresh(region.biome_type, region.id * 2654435761 % 2147483647)
 	else:
 		region.region_name = name_generator.mint_derived(parent_name, region.biome_type, siblings, region.id * 40503)
 	region.parent_region_name = parent_name
 	region.is_pending = false
+	# Suppress birth logging during loaded-world bootstrap and seed `last_growth_threshold` to current area.
 	if suppress_bootstrap_births:
-		# Bootstrap on a LOADED world: regions are rediscovered, not born —
-		# no Birth entry, and the growth marker is seeded to the area the
-		# region already has so the next milestone flush doesn't retroactively
-		# log thresholds it crossed before the save.
 		region.last_growth_threshold = 0
 		var area : float = region.get_area_km2(cell_area_km2)
 		for threshold : float in GROWTH_THRESHOLDS_KM2:
@@ -669,7 +634,7 @@ func _christen(region : SimulationRegion, parent_name : String, siblings : Packe
 	region_named.emit(region)
 
 
-## Growth milestones: area thresholds (§5.1). One-shot per threshold per region.
+## Checks all christened regions against `GROWTH_THRESHOLDS_KM2` and logs newly crossed area milestones in `aeon_log`.
 func _flush_growth_milestones() -> void:
 	if cell_area_km2 <= 0.0:
 		return
@@ -683,9 +648,7 @@ func _flush_growth_milestones() -> void:
 				aeon_log.log_growth(region.region_name, area, threshold)
 
 
-# ============================================================================
-## §3.4 MUTATION QUEUE
-# ============================================================================
+## Replays buffered transition batches from `_mutation_queue` in FIFO order until empty or a new split job is enqueued.
 func _replay_mutation_queue() -> void:
 	if _mutation_queue.is_empty() or _job_in_flight:
 		return
@@ -693,18 +656,17 @@ func _replay_mutation_queue() -> void:
 	_mutation_queue = []
 	for batch : Array in queued:
 		if _job_in_flight:
-			_mutation_queue.append_array(queued)  # a replay queued a new job
+			_mutation_queue.append_array(queued)
 			return
 		_apply_transitions(batch)
 
 
-# ============================================================================
-## QUERIES (for economy §4.1, fauna §7.2, visualization)
-# ============================================================================
+## Returns the `SimulationRegion` owning `cell_index`, or `null` if out of bounds or unassigned.
 func get_region_at(cell_index : int) -> SimulationRegion:
 	var rid : int = cell_to_region[cell_index] if cell_index >= 0 and cell_index < cell_to_region.size() else -1
 	return regions.get(rid, null)
 
 
+## Returns the total number of active `SimulationRegion` instances currently tracked in `regions`.
 func get_region_count() -> int:
 	return regions.size()

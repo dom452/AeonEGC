@@ -1,69 +1,50 @@
 @tool
 extends Push_Constant
+## Push constant that relays a single player click event into a compute shader for exactly
+## one frame, then resets to a default value (e.g. 0) on subsequent frames to avoid duplicate actions.
 class_name PushConstant_PlayerAction
 
-## Push constant that relays a single Player Action click (from SphereCursorPicker's
-## `cell_clicked` signal) into a compute shader's push-constant block for ONE dispatch frame,
-## then clears itself (returns the field's zero/default on subsequent frames).
-##
-## One resource encodes exactly ONE field of the click payload. Add four instances to a
-## PLAYER_ACTIONS sim layer's `push_constants_resources` array (one per Field) to pass the
-## full (cell, uv, action_key, action_value) tuple to the shader.
-##
-## `action_key` on the wire is the spell's action bit pattern (PlayerSpell.get_action_bit_pattern():
-## 1u << slot_index for placements, the target's bit for selective dispels, or WIPE_ALL —
-## all bits — for a whole-cell wipe). The wire value is 0 ONLY on frames without a click.
-## A NEGATIVE `action_value` (dispel tool) instructs the shader to clear bits instead of
-## setting one.
-##
-## Lifecycle (the "single frame" contract):
-##   1. `cell_clicked` fires during the input phase (before _process) → the handler caches
-##      this resource's field and sets `_pending = true`.
-##   2. During dispatch (process phase) the layer calls `get_value()` once → it returns the
-##      cached value and immediately clears `_pending`.
-##   3. The next dispatch calls `get_value()` again → `_pending` is false, so it returns the
-##      field's zero/default. For ACTION_KEY this is 0, which the shader treats as "no action".
-##
-## Node discovery: reads `GameStateManager.cursor_picker` — a static reference that the
-## GameStateManager owner sets when spawning the picker (mirrors the GSM singleton pattern).
-## On the first valid `get_value()` it caches the picker and subscribes to `cell_clicked`.
-## If `cursor_picker` is still null, it logs an error and retries on the next `get_value()`.
-##
-## Type detection: `cache_push_constants_layout()` calls `get_value()` to infer `type` only
-## when `type == TYPE_NIL`. We set `type` explicitly from `field` in `_init()`/`_update_metadata()`,
-## so layout-caching never depends on the picker existing yet.
-
+## Which field of the player click event this push constant extracts and delivers.
 enum Field {
-	CELL = 0,         ## Vector2i — discrete grid cell under the cursor.
-	UV = 1,           ## Vector2   — equirectangular [0,1]² UV under the cursor.
-	ACTION_KEY = 2,   ## int — pre-shifted spell bit pattern (1u << bit); 0 = no action this frame.
-	ACTION_VALUE = 3, ## float — spell cost; NEGATIVE = dispel/wipe the spell bit.
+	## Discrete 2D grid cell coordinate (Vector2i) under the cursor.
+	CELL = 0,
+	## Equirectangular UV coordinate (Vector2) under the cursor.
+	UV = 1,
+	## Bitmask (int) representing the spell slot; 0 means no action occurred this frame.
+	ACTION_KEY = 2,
+	## Numeric value or cost (float); positive values place spells, negative values dispel/clear them.
+	ACTION_VALUE = 3,
 }
 
-## Which payload field this resource encodes. Changing it re-derives `type` and `name`.
+## Configures which specific component of the player action payload this resource provides.
 @export var field : Field = Field.ACTION_KEY:
 	set(v):
 		field = v
 		_update_metadata()
 
+## Cached reference to the SphereCursorPicker node handling 3D picking.
 var _picker : SphereCursorPicker
+## True once this resource has connected to the cursor picker's click signal.
 var _subscribed : bool = false
+## True when a new click event has arrived but has not yet been consumed by the GPU dispatch.
 var _pending : bool = false
 
+## Cached cell coordinate from the most recent click.
 var _cached_cell : Vector2i = Vector2i.ZERO
+## Cached UV coordinate from the most recent click.
 var _cached_uv : Vector2 = Vector2.ZERO
+## Cached action bitmask from the most recent click.
 var _cached_action_key : int = 0
+## Cached action value/cost from the most recent click.
 var _cached_action_value : float = 0.0
 
 
-## Constructor — derives `type` and `name` from the default `field`. Runs both in the
-## editor and at runtime so the inspector and layout-caching see a concrete type immediately.
+## Initializes the resource and establishes its data type and name based on the selected field.
 func _init() -> void:
 	_update_metadata()
 
-## Re-derives `type` and `name` whenever `field` changes. Setting `type` explicitly here
-## means `cache_push_constants_layout()` never has to call `get_value()` for type inference
-## (which would fail before the picker exists).
+
+## Sets the Variant type and debug name corresponding to the selected payload field.
 func _update_metadata() -> void:
 	match field:
 		Field.CELL:
@@ -79,17 +60,14 @@ func _update_metadata() -> void:
 			type = TYPE_FLOAT
 			name = StringName("PlayerAction.ActionValue")
 
-## Called by the layer dispatcher each frame. Returns the cached click value ONCE (then
-## clears `_pending`), or the field's zero/default on subsequent calls. Also performs the
-## lazy one-time picker discovery + signal subscription on first valid call.
+
+## Retrieves the click data once for the active dispatch frame, then clears the pending flag so it reverts to zero.
 func get_value() -> Variant:
-	# Never touch global state in the editor — return the default so inspector display works.
+	# Avoid querying runtime singletons while inspecting resources in the editor.
 	if Engine.is_editor_hint():
 		return _default_value()
 
-	# Lazy discovery via the GameStateManager static reference. Re-acquire (and reset
-	# subscription state) whenever our cached picker has gone invalid, so a respawned
-	# picker is picked up and re-subscribed on a later frame.
+	# Lazily locate the cursor picker singleton if not yet acquired.
 	if not is_instance_valid(_picker):
 		_picker = GameStateManager.cursor_picker
 		_subscribed = false
@@ -97,30 +75,30 @@ func get_value() -> Variant:
 			push_error("PushConstant_PlayerAction: GameStateManager.cursor_picker is null. Retrying next frame.")
 			return _default_value()
 
-	# Subscribe exactly once per valid picker instance.
+	# Connect to the click event signal once per valid picker instance.
 	if not _subscribed:
 		if not _picker.cell_clicked.is_connected(_on_cell_clicked):
 			_picker.cell_clicked.connect(_on_cell_clicked)
 		_subscribed = true
 
-	# Single-frame consume: return the cached value once, then revert to the default.
+	# Return the click data for this frame, then immediately reset so it doesn't trigger again next frame.
 	if _pending:
 		_pending = false
 		return _cached_value_for_field()
 	return _default_value()
 
-## Signal handler — caches the full click payload and arms this resource for one dispatch.
-## The full tuple is cached on every resource regardless of `field`, so the four resources
-## in a layer stay synchronized to the same click event.
+
+## Caches the click payload received from the cursor picker and arms the pending flag for the next dispatch.
 func _on_cell_clicked(cell : Vector2i, uv : Vector2, action_key : int, action_value : float) -> void:
+	# Store the full event payload so any paired push constant resources receive identical state.
 	_cached_cell = cell
 	_cached_uv = uv
 	_cached_action_key = action_key
 	_cached_action_value = action_value
 	_pending = true
 
-## Returns the cached value for THIS resource's configured field. Only meaningful while
-## `_pending` is true (i.e. the frame immediately after a click).
+
+## Returns the cached value corresponding to this resource's configured field.
 func _cached_value_for_field() -> Variant:
 	match field:
 		Field.CELL:         return _cached_cell
@@ -129,8 +107,8 @@ func _cached_value_for_field() -> Variant:
 		Field.ACTION_VALUE: return _cached_action_value
 	return _default_value()
 
-## Returns the field's zero/default value, used outside the single-frame window and in the
-## editor. For ACTION_KEY this is 0, which the shader interprets as "no action this frame".
+
+## Returns the neutral default value for this field when no player click is active (e.g. 0 for action key).
 func _default_value() -> Variant:
 	match field:
 		Field.CELL:         return Vector2i.ZERO
@@ -138,3 +116,4 @@ func _default_value() -> Variant:
 		Field.ACTION_KEY:   return 0
 		Field.ACTION_VALUE: return 0.0
 	return 0
+

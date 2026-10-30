@@ -1,44 +1,43 @@
 extends RefCounted
+## Represents a contiguous 4-connected geographic province of identical biome
+## type tracked by `RegionGraphManager`.
 class_name SimulationRegion
 
-## A contiguous geographic province of identical biome type
-## (_planning/event_logging_system_plan.md §3.2).
-
-## Permanent unique identifier. Never changes once assigned.
+## Permanent unique identifier assigned when the region is created.
 var id : int
 
-## Player-facing name ("The Great Erg of Zephyr"); empty while pending (§5.1).
+## Player-facing procedural name (e.g., "The Great Erg of Zephyr"); empty while `is_pending` is true.
 var region_name : String
 
-## True until the region crosses the christening threshold; pending regions are
-## structural members of the graph but carry no name and log no milestones.
+## True until the region reaches `RegionGraphManager.CHRISTEN_THRESHOLD` cells and receives a name.
 var is_pending : bool = true
 
-## Biome ID (0..17 matching the Master Biome Catalog).
+## Catalog biome ID (`0..17`) shared by all member cells in this region.
 var biome_type : int
 
-## Member cell indices (i = y * width + x). Kept in sync with the flat
-## cell_to_region lookup owned by RegionGraphManager. Emptied on merge/archive.
+## Set of flat member cell indices (`cell_index -> true`), kept in sync with `RegionGraphManager.cell_to_region`.
 var cells : Dictionary = {}
 
-## Incremental centroid accumulators (O(1) maintenance on attach/detach;
-## additive on merges §3.3.2). The anchor is derived LAZILY from these when a
-## split contest needs it (§3.3.3): the member cell nearest
-## (sum_x / count, sum_y / count). Never persisted, never invalidated.
+## Running sum of member cell X coordinates for O(1) incremental centroid updates.
 var sum_x : int = 0
+## Running sum of member cell Y coordinates for O(1) incremental centroid updates.
 var sum_y : int = 0
 
-## Historical metadata.
+## Simulation year in which this region was first created.
 var founding_year : int = 0
-var parent_region_name : String = ""   # set if formed via severing/splitting
+## Name of the parent region if this region was formed by a split; empty otherwise.
+var parent_region_name : String = ""
+## Historical high-water mark of member cell count reached by this region.
 var total_cells_peak : int = 0
-var last_growth_threshold : int = 0    # highest §5.1 area threshold crossed
+## Highest surface-area milestone threshold (in km²) already logged for this region.
+var last_growth_threshold : int = 0
 
+
+## Returns the current number of grid cells belonging to this region.
 func get_cell_count() -> int:
 	return cells.size()
 
-## Area in km2. `cell_area_km2` is derived from WorldConfig once at manager
-## startup — never hardcoded (plan §3.2). This is the equatorial value;
-## per-row cos(latitude) weighting is a possible later refinement.
+
+## Returns the region's total surface area in square kilometers given the area of one grid cell.
 func get_area_km2(cell_area_km2 : float) -> float:
 	return float(cells.size()) * cell_area_km2

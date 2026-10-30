@@ -1,26 +1,14 @@
 extends RefCounted
+## Generates deterministic procedural names for newly christened regions and
+## relational daughter names for severed region fragments.
 class_name RegionNameGenerator
 
-## Procedural region naming for the simulation region graph
-## (_planning/event_logging_system_plan.md §5.1/§7.4).
-##
-## Two modes:
-##   FRESH  — seed regions / expansion into empty space: a new composition from
-##            the biome-category word banks. No parent exists, so nothing is
-##            derived.
-##   DERIVED — split daughters: the parent's root plus a relational prefix,
-##            with sibling-uniqueness and a ONE-LEVEL composition cap.
-##
-## The generator is stateless beyond its used-name set (owned by the caller);
-## every minted name is checked against `used_names` before returning.
-
-# --- Relational prefixes for derived (daughter) names, ranked by preference. ---
+## Ordered relational prefixes prepended to a parent region's root when naming split daughter fragments.
 const RELATIONAL_PREFIXES : PackedStringArray = [
 	"Lesser", "Far", "Upper", "Sundered", "Cleaved", "Lower", "Outer", "New",
 ]
 
-# --- Per-category name banks: prefixes, roots, suffixes. ---
-# Categories map from biome ID via `category_for_biome`.
+## Word banks of `prefix`, `root`, and `suffix` token arrays keyed by biome naming category.
 const BANKS : Dictionary = {
 	"cryosphere": {
 		"prefix": ["Frozen", "Pale", "Silent", "White", "Shivering"],
@@ -99,7 +87,7 @@ const BANKS : Dictionary = {
 	},
 }
 
-## Maps a biome catalog ID to its naming category (§2.3 catalog order).
+## Lookup table mapping catalog biome IDs (`0..17`) to their naming category keys in `BANKS`.
 const BIOME_CATEGORY : PackedStringArray = [
 	"cryosphere",   # 0  Glacial Ice Sheet
 	"cold",         # 1  Polar Tundra
@@ -121,21 +109,23 @@ const BIOME_CATEGORY : PackedStringArray = [
 	"pelagic",      # 17 Pelagic Deep Ocean
 ]
 
-## Articles are part of the identity ("The Great Erg of Zephyr").
+## Definite article prefix included in every region's canonical display name.
 const ARTICLE : String = "The "
 
-var used_names : Dictionary = {}  # name -> true
+## Set of all region names already minted in the current world (`name -> true`) to guarantee uniqueness.
+var used_names : Dictionary = {}
 
 
+## Returns the naming category key in `BANKS` for `biome_id`, defaulting to `"grassland"` if out of range.
 static func category_for_biome(biome_id : int) -> String:
 	if biome_id < 0 or biome_id >= BIOME_CATEGORY.size():
 		return "grassland"
 	return BIOME_CATEGORY[biome_id]
 
 
-## Mints a fresh name for a seed region of `biome_id`.
-## Deterministic per (biome, salt) so replays of the same world seed are stable.
+## Mints and records a unique, deterministic fresh region name from `biome_id`'s word bank using `salt`.
 func mint_fresh(biome_id : int, salt : int) -> String:
+	# Probe up to 64 deterministic combinations from the biome's word bank for an unused name.
 	var category : String = category_for_biome(biome_id)
 	var bank : Dictionary = BANKS[category]
 	for attempt : int in 64:
@@ -143,30 +133,24 @@ func mint_fresh(biome_id : int, salt : int) -> String:
 		if not used_names.has(name):
 			used_names[name] = true
 			return name
-	# Bank exhausted for this category: fall back to numbered uniqueness.
+	# Append a sequential number if all probed combinations in the category bank are already taken.
 	var base : String = _compose(bank, salt)
 	var unique : String = "%s %d" % [base, used_names.size() + 1]
 	used_names[unique] = true
 	return unique
 
 
-## Mints a derived daughter name from `parent_name` (§5.1):
-##   - one relational prefix on the parent's root;
-##   - skips relational tokens already present in ANY sibling name
-##     (`sibling_names`, caller supplies the other daughters minted this split);
-##   - composes ONE level deep and caps there (never three prefixes deep):
-##     "The Lesser Erg of Zephyr" -> "The Sundered Lesser Erg of Zephyr";
-##   - deeper nesting truncates back to root + new token.
+## Mints a unique daughter name derived from `parent_name` using a relational prefix not already
+## used by `parent_name` or `sibling_names`, capped at one relational prefix deep.
 func mint_derived(parent_name : String, biome_id : int, sibling_names : PackedStringArray, salt : int) -> String:
 	var root : String = _strip_article(parent_name)
-	# One-level composition cap: if the parent already begins with a relational
-	# token, strip it so the daughter is root + new token, never 3 deep.
+	# Strip any existing relational prefix so derived names never stack more than one relational token deep.
 	for token : String in RELATIONAL_PREFIXES:
 		if root.begins_with(token + " "):
 			root = root.trim_prefix(token + " ")
 			break
 
-	# The parent's own relational tokens are consumed (not reusable by children).
+	# Collect relational tokens already used by the parent or sibling fragments from the same split.
 	var taken : Dictionary = {}
 	for token : String in RELATIONAL_PREFIXES:
 		if parent_name.contains(token):
@@ -176,16 +160,17 @@ func mint_derived(parent_name : String, biome_id : int, sibling_names : PackedSt
 			if sibling.contains(token):
 				taken[token] = true
 
+	# Filter `RELATIONAL_PREFIXES` down to tokens not yet claimed in this lineage.
 	var available : PackedStringArray = PackedStringArray()
 	for token : String in RELATIONAL_PREFIXES:
 		if not taken.has(token):
 			available.append(token)
 
-	# No relational tokens left at all: fall back to a fresh name (§5.1 spirit —
-	# uniqueness beats lineage when the family tree is exhausted).
+	# Fall back to a fresh biome name if every relational prefix is already exhausted.
 	if available.is_empty():
 		return mint_fresh(biome_id, salt)
 
+	# Select the first deterministic candidate that does not collide with `used_names` or siblings.
 	for attempt : int in available.size():
 		var token : String = available[(salt + attempt) % available.size()]
 		var candidate : String = ARTICLE + token + " " + root
@@ -193,14 +178,14 @@ func mint_derived(parent_name : String, biome_id : int, sibling_names : PackedSt
 			used_names[candidate] = true
 			return candidate
 
-	# Every available token collides with used_names: number the first.
+	# Append a sequential number if every available relational prefix collides with an existing region name.
 	var fallback : String = ARTICLE + String(available[salt % available.size()]) + " " + root
 	var unique : String = "%s %d" % [fallback, used_names.size() + 1]
 	used_names[unique] = true
 	return unique
 
 
-## Whether `name` already begins with a relational token.
+## Returns true if `name` (after stripping `"The "`) begins with a token from `RELATIONAL_PREFIXES`.
 static func has_relational_prefix(name : String) -> bool:
 	var stripped : String = _strip_article(name)
 	for token : String in RELATIONAL_PREFIXES:
@@ -209,6 +194,7 @@ static func has_relational_prefix(name : String) -> bool:
 	return false
 
 
+## Assembles `"The <prefix> <root> <suffix>"` from `bank` using `salt` to index each token list.
 func _compose(bank : Dictionary, salt : int) -> String:
 	var prefixes : Array = bank["prefix"]
 	var roots : Array = bank["root"]
@@ -221,6 +207,7 @@ func _compose(bank : Dictionary, salt : int) -> String:
 	return ARTICLE + prefix + " " + root + " " + suffix
 
 
+## Returns `name` with the leading `"The "` article removed if present.
 static func _strip_article(name : String) -> String:
 	if name.begins_with(ARTICLE):
 		return name.trim_prefix(ARTICLE)

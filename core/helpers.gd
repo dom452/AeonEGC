@@ -1,6 +1,9 @@
 extends RefCounted
+## Authoritative registry of simulation domain enums, VRAM sub-layer names,
+## `std430` SSBO byte layouts, auxiliary uniform bindings, and biome catalog IDs.
 class_name Helpers
 
+## Simulation domain categories indexing the fine float, atomic, and SSBO layer maps.
 enum sim_layers {
 	LANDSCAPE = 0,
 	WATER = 1,
@@ -14,6 +17,7 @@ enum sim_layers {
 	INVALID = -1
 }
 
+## High-level execution pipeline categories grouping compute passes in `WorldConfig`.
 enum system_names {
 	TOPOGRAPHY_GENERATION = 0,
 	THERMODYNAMICS = 1,
@@ -24,6 +28,7 @@ enum system_names {
 	PLAYER_ACTIONS = 6
 }
 
+## Layer indices for the 64×64×9 `r32f` coarse atmospheric dynamics texture array.
 enum coarse_layers {
 	H_UPPER = 0,         # Upper layer column height (stratosphere)
 	WIND_UPPER_X = 1,    # Upper layer eastward velocity (jet stream)
@@ -32,64 +37,15 @@ enum coarse_layers {
 	WIND_LOWER_X = 4,    # Lower layer eastward velocity (surface wind)
 	WIND_LOWER_Y = 5,    # Lower layer southward velocity
 	AIR_TEMP = 6,        # Downsampled fine air_temp (thermal forcing on lower layer)
-	TERRAIN = 7,         # Downsampled area-weighted mean terrain (for Audusse well-balanced)
+	TERRAIN = 7,         # Downsampled area-weighted mean terrain (Audusse well-balanced SWE)
 	ROUGHNESS = 8,       # Sub-grid terrain variance / roughness (orographic boundary drag)
 	COUNT
 }
 
-# ==========================================
-## ARRAY A: THE FLOAT GRID (r16f)
-## Used for fast physics & read-only environment data.
-## Note: Variables like WATER_LIQUID_HEIGHT are cached floats. 
-## The absolute Source of Truth for mass remains the Atomic grid. 
-## Floats are used here only to optimize neighbor-sampling in shaders.
-##
-## --- GLOBAL PHYSICAL & SYSTEM UNIT SCALES ---
-## Grid Cell Size (Horizontal): Variable — derived from planetary_diameter ÷ texture_resolution.
-##   Default config (Earth-like): diameter=12,742 km, texture=512×512 → ~78 km/cell at equator.
-##   The shaders operate entirely in normalized grid space; cell size never appears in formulae.
-##   DO NOT assume 100m×100m — that was an error. Compute from WorldConfig if you need physical area.
-##
-## LANDSCAPE (Height-Units ≡ Hectometers):
-##   - BEDROCK_HEIGHT, SEDIMENT_HEIGHT: 1.0 float unit = 100 meters of height/depth.
-##     (a.k.a. "hectometers"; max peak 200.0 = 20,000 m = Everest-scale)
-##   - GROUND_TEMP: Degrees Celsius (°C). Phase-change lock at 0°C.
-##   - SLOPE.X/Y: Height-units per grid-cell gradient (dimensionless; range ≈ [-1, 1])
-##
-## WATER (same Height-Unit system as landscape — proven by hydraulic self_height sum):
-##   - WATER_LIQUID_HEIGHT, WATER_ICE_HEIGHT: 1.0 float unit = 100 meters of equivalent depth.
-##     These are DEPTH values, NOT volumes. The hydraulic shader adds them directly to bedrock:
-##       self_height = bedrock + sediment + liquid_mass + ice_mass
-##     All four terms share the same hectometer unit. Volume would require cell area (see above).
-##   - WATER_TEMP: Degrees Celsius (°C). Same phase-change logic as ground_temp.
-##   - NET_VELOCITY.X/Y: Abstract flow rate units (scaled by max_flow_rate).
-##   - DIVERGENCE, TURBULENCE: Dimensionless flow derivatives.
-##
-## ENERGY:
-##   - SUNLIGHT: Normalized Lambertian insolation [0.0, 1.0]. 1.0 = zenith on equator.
-##   - TIDAL_FORCE: Cosine-based tidal oscillator ∈ [-1, 1]. Dimensionless.
-##
-## ATMOSPHERE:
-##   - AIR_TEMP: Degrees Celsius (°C). Driven by equator/pole latitudinal gradient ± orographic effects.
-##   - WIND.X/Y: Horizontal wind velocity from the SWE (Shallow Water Equations) dynamical core.
-##     SWE co-evolves wind and pressure (column height h) in a conservative finite-volume update.
-##     Dimensionless grid-cells/frame. Terrain-aware (air flows around mountains via Audusse source).
-##   - WIND.Z: Diagnosed vertical wind from horizontal divergence: -div(h*u)/h.
-##     Positive = updraft, negative = subsidence. Used by cloud parameterization and fauna.
-##   - HUMIDITY: Specific humidity normalized ratio. Advection + evap - precip, clamped [~0.03, ~1.5].
-##   - RAIN, SNOW: Precipitation rate normalized to [0, 1] via clamp(rate * 50, 0, 1).
-##   - PRESSURE: SWE column height h (pressure ∝ g*h). Primary conserved field. Hydrostatic.
-##   - PRESSURE_L1/L2: Diagnosed upper-layer pressures from lapse rate: h * exp(-z/H_scale).
-##     Used for vis (cloud caps, jet stream) and orographic cloud logic.
-##
-## FLORA:
-##   - GROWTH_RATE_MODIFIER: Dimensionless multiplier [0, 1] from temperature/moisture suitability.
-##   - CANOPY_SHADE: Dimensionless light reduction factor from tree canopy coverage.
-##
-## FAUNA:
-##   - SCENT_* fields: Olfactory signal intensities. Dimensionless concentration values.
-##     Decayed each frame; used for agent navigation and territory marking.
-# ==========================================
+## Ordered sub-layer names per `sim_layers` domain in the 512×512 `r16f` Fine Float Grid (Bindings 0/1).
+## Physical units: heights/depths (`BEDROCK_HEIGHT`, `SEDIMENT_HEIGHT`, `WATER_LIQUID_HEIGHT`, `WATER_ICE_HEIGHT`)
+## are in Hectometers (`1.0 = 100 m`); temperatures are in `°C`; `SUNLIGHT`, `HUMIDITY`, `RAIN`, `SNOW`,
+## `GROWTH_RATE_MODIFIER`, and `CANOPY_SHADE` are normalized ratios; `PRESSURE` is SWE column height `h`.
 const float_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.LANDSCAPE: [
 		"BEDROCK_HEIGHT", 
@@ -99,7 +55,6 @@ const float_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 		"GROUND_TEMP"
 		],
 	sim_layers.WATER: [
-		# Cached from Atomic LIQUID_VOLUME and ICE_VOLUME
 		"WATER_LIQUID_HEIGHT", 
 		"WATER_ICE_HEIGHT", 
 		"NET_VELOCITY.X", 
@@ -153,66 +108,10 @@ const float_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.INVALID: ["INVALID"]
 }
 
-# ==========================================
-## ARRAY B: THE ATOMIC GRID (r32ui / r32i)
-## Used exclusively for consumable, interactive resources via imageAtomicAdd
-##
-## --- GLOBAL PHYSICAL & SYSTEM UNIT SCALES ---
-## Grid Cell Size (Horizontal): Same as Float Grid — see Array A header above.
-##   Default config: ~78 km/cell at equator. NOT 100m×100m.
-##
-## ATOMIC MULTIPLIERS (from WorldConfig push constants):
-##   - atomic_multiplier = 100.0       → Used by WATER, LANDSCAPE, ENERGY, ATMOSPHERE layers
-##   - flora_atomic_multiplier = 1,000,000.0 → Used ONLY by FLORA layer (10,000× more precision)
-##
-## WATER (atomic_multiplier = 100.0):
-##   - LIQUID_VOLUME, ICE_VOLUME: 1 uint unit = 0.01 height-units = 1 meter of equivalent depth.
-##     Conversion in shaders: float_depth = uint_value / atomic_multiplier (= ÷ 100).
-##     Example: 5000 uint → 50.0 float → 5,000 m depth.
-##     NOTE: These are DEPTH units (same hectometer system as bedrock), NOT volume (GL).
-##           Volume would require multiplying by cell area (~78km × 78km ≈ 6,100 km² default).
-##   - ARTESIAN_SOURCES: Same depth units; injected each frame at artesian_flow_rate.
-##   - SALINITY: Dimensionless concentration ratio [0, atomic_multiplier cap].
-##
-## LANDSCAPE (atomic_multiplier = 100.0):
-##   - MINERALS, SOIL_NUTRIENTS: Dimensionless abundance scales.
-##     1 uint = 0.01 "nutrient units". Interpretation is layer-specific.
-##   - MAGIC_SATURATION: Arcane concentration. Game mechanic, not physical.
-##   - BIOME_TYPE: Packed 32-bit classification texel (NOT a plain multiplier-scaled
-##     quantity — never imageAtomicAdd, never divide by atomic_multiplier):
-##       [0..7]   biome ID  — 0..17 valid catalog IDs; 255 = BIOME_UNCLASSIFIED.
-##       [8..31]  attribution snapshot — 24-bit ACTION_KEY spell-presence bitmask
-##                captured at classification time. All-zero = natural transition.
-##     Single-writer discipline: only biome_seeding_generator.glsl (world-gen
-##     bootstrap) and biome_classifier_sim.glsl (runtime) write it, via plain
-##     imageStore of the full 32-bit texel. CPU never writes back.
-##     Plan: _planning/event_logging_system_plan.md §2.1.
-##
-## ENERGY (atomic_multiplier = 100.0):
-##   - GEOTHERMAL: 1 uint = 0.01 normalized heating coefficient.
-##     Conversion: float_heat = uint_value / atomic_multiplier (= ÷ 100).
-##     Applied as: ground_temp += geothermal * geothermal_heating_rate * deltaTime.
-##     With defaults (geothermal_heating_rate=0.01): 100 uint → 1.0 float → +0.01 °C/frame.
-##     This is a tunable heating rate, NOT real thermodynamics (no latent heat, no mass involved).
-##     The old comment claiming "GL heat energy equivalent" was fictional — removed.
-##   - MAGIC_MAGNITUDE, MAGIC_TYPE: Game mechanics, not physical units.
-##
-## ATMOSPHERE (atomic_multiplier = 100.0):
-##   - POLLUTION_DENSITY: Dimensionless concentration. Affects air quality / visibility if implemented.
-##   - MAGIC_SATURATION: Game mechanic.
-##
-## FLORA (flora_atomic_multiplier = 1,000,000.0 — separate from all other layers!):
-##   - GRASSES, SHRUBS, TREES_CANOPY, AQUATIC: Population biomass in fixed-point notation.
-##     Conversion: float_biomass = uint_value / flora_atomic_multiplier (= ÷ 1,000,000).
-##     Carrying capacities (K): grass ≤ 1.0, shrub ≤ 3.0, tree ≤ 5.0, aquatic ≤ 2.0.
-##     High multiplier prevents small per-frame growth deltas from truncating to zero in r32ui.
-##     Example: 500,000 uint → 0.5 float biomass → 50% of grass carrying capacity.
-##   - FLORA_DETRITUS: Dead organic matter pool. Same multiplier and dimensionless biomass scale.
-##   - MAGIC_SATURATION: Game mechanic.
-##
-## FAUNA (atomic_multiplier = 100.0):
-##   - CARRION, ANIMAL_WASTE: Detritus pools for scavenger/decomposer food chains.
-# ==========================================
+## Ordered sub-layer names per `sim_layers` domain in the 512×512 `r32ui` Atomic Grid (Binding 2).
+## Mass-conserved quantities use `atomic_multiplier = 100.0` (`1 uint = 0.01` float units / `1 m` depth),
+## except `FLORA` (`flora_atomic_multiplier = 1,000,000.0`), `ACTION_KEY` (32-bit spell bitmask), and
+## `BIOME_TYPE` (low byte `[0..7]` = biome ID `0..17` or `255`, upper bits `[8..31]` = 24-bit attribution mask).
 const atomic_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.LANDSCAPE: [
 		"MINERALS", 
@@ -227,7 +126,6 @@ const atomic_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 		"SALINITY",
 		"MAGIC_SATURATION"
 		],
-	# PLAYER INTERACTION HERE in MAGIC ONLY
 	sim_layers.ENERGY: [
 		"MAGIC_MAGNITUDE", 
 		"MAGIC_TYPE", 
@@ -255,10 +153,7 @@ const atomic_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.INVALID: ["INVALID"]
 }
 
-# ==========================================
-## ARRAY C: THE SSBO CLUSTERS
-## Used for Lagrangian agents and populations
-# ==========================================
+## Maximum number of Lagrangian `PopulationCluster` elements allocated in the SSBO (Bindings 3/4) per domain.
 const ssbo_layer_to_max_clusters : Dictionary [sim_layers, int] = {
 	sim_layers.LANDSCAPE: 0, 
 	sim_layers.WATER: 0, 
@@ -272,6 +167,7 @@ const ssbo_layer_to_max_clusters : Dictionary [sim_layers, int] = {
 	sim_layers.INVALID: 0 
 }
 
+## Symbolic SSBO sub-layer names per `sim_layers` domain for debug inspection and push constant binding.
 const ssbo_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.LANDSCAPE: [],
 	sim_layers.WATER: [],
@@ -285,10 +181,7 @@ const ssbo_sub_layer_names : Dictionary [sim_layers, PackedStringArray] = {
 	sim_layers.INVALID: []
 }
 
-# ==========================================
-## ARRAY D: THE COARSE GRID (r32f)
-## Used for large-scale dynamics (SWE atmosphere)
-# ==========================================
+## Display names for each slice of the 64×64×9 `r32f` Coarse Dynamics Grid (Bindings 6/7).
 const coarse_sub_layer_names : Dictionary[coarse_layers, String] = {
 	coarse_layers.H_UPPER: "H_UPPER",
 	coarse_layers.WIND_UPPER_X: "WIND_UPPER_X",
@@ -301,51 +194,49 @@ const coarse_sub_layer_names : Dictionary[coarse_layers, String] = {
 	coarse_layers.ROUGHNESS: "ROUGHNESS"
 }
 
+## Field identifiers for the 96-byte `std430` `PopulationCluster` struct in Bindings 3/4.
 enum population_cluster_params {
 	## Continuous world space coordinates (Float grid relative).
 	WORLD_POSITION,
 	## Current movement direction and momentum.
 	MIGRATION_VECTOR,
-	## Base taxonomy ID. Locks absolute biological limits (e.g. max size) to prevent absurd cross-mutations.
+	## Base taxonomy ID locking biological trait bounds.
 	ARCHETYPE_ID,
-	## Total mass/population of the cluster. Grows when energy is surplus; cluster splits if too large.
+	## Total mass/population of the cluster; splits when exceeding capacity.
 	BIOMASS,
-	## Short-term stamina/hunger. Burned by actions and metabolism. Replenished by successful feeding.
+	## Short-term stamina/hunger burned by metabolism and replenished by feeding.
 	ENERGY,
-	
-	# === Mutable / Evolvable Traits (The Genome) ===
-	
-	## 0.0 (Reptilian/Slow) to 1.0 (Avian/Fast). High rate burns energy quickly but acts/recovers faster.
+	## 0.0 (slow/ectothermic) to 1.0 (fast/endothermic) metabolic rate.
 	METABOLIC_RATE,
-	## (Plant, Meat, Carrion) efficiency. (1,0,0) = Strict Herbivore, (0,1,0) = Apex Predator, (0,0,1) = Scavenger.
+	## `(Plant, Meat, Carrion)` feeding efficiency weights.
 	DIET_SPECTRUM,
-	## 0.0 (Insect/Rodent) to 1.0 (Megafauna). Affects overall baseline energy cost, combat survival, and speed.
+	## 0.0 (micro/insect) to 1.0 (megafauna) body mass scale.
 	SIZE_MASS,
-	## 0.0 (Solitary/Territorial) to 1.0 (Swarm/Herd). Determines willingness to merge with similar clusters.
+	## 0.0 (solitary/territorial) to 1.0 (herd/swarm) merging affinity.
 	SOCIAL_COHESION,
-	## 0.0 (Flight) to 1.0 (Fight). Determines reaction and hunting drive when encountering foreign species.
+	## 0.0 (flight) to 1.0 (fight) combat and predation drive.
 	AGGRESSION,
-	## Mass differential required to flee. 0.0 = panics at everything, 1.0 = fearless even against titans.
+	## Relative mass differential required to trigger fleeing behavior.
 	FEAR_THRESHOLD,
-	## 0.0 (Static/Territorial) to 1.0 (Nomadic). Drives random wandering logic in the migration vector.
+	## 0.0 (site-faithful) to 1.0 (nomadic) exploratory wandering weight.
 	CURIOSITY,
-	## 0.0 to 1.0. Replaces sensory radius. Detection of things in local 9-cells is chance-based on this float.
+	## 0.0 to 1.0 probability of detecting stimuli within the local 3×3 neighborhood.
 	PERCEPTIVENESS,
-	## 0.0 (r-selection: splits often, weak offspring) to 1.0 (K-selection: splits rarely, huge offspring).
+	## 0.0 (r-selection) to 1.0 (K-selection) reproductive investment strategy.
 	OFFSPRING_INVEST,
-	## Preferred climate. Environmental temperature divergence from this causes a continuous energy drain penalty.
+	## Optimal environmental temperature in degrees Celsius before thermal stress drain.
 	TEMP_OPTIMUM,
-	## Variance applied to traits upon splitting. Low = stable species, High = rapid chaotic evolution.
+	## Trait variance magnitude applied when a cluster splits into offspring.
 	MUTATION_RATE,
-	## 0.0 to 1.0+. Concentration of arcane energy. 
+	## 0.0 to 1.0+ accumulated arcane energy concentration.
 	MAGIC_SATURATION,
-	## Integer representing the specific elemental or categorical magic alignment (e.g., Fire, Decay, Arcane).
+	## Categorical magic alignment ID for mutated clusters.
 	MAGIC_MUTATION_TYPE,
-	## 0.0 to 1.0. How strongly this cluster exhibits its mutated magical traits.
+	## 0.0 to 1.0 expression strength of mutated magical traits.
 	MAGIC_MUTATION_MAGNITUDE
 }
 
-# Byte offsets structured to perfectly align with GLSL std430 packing rules
+## Byte offsets for each field in `population_cluster_params` matching `std430` alignment rules.
 const population_cluster_param_offsets : Dictionary[population_cluster_params, int] = {
 	population_cluster_params.WORLD_POSITION: 0,      # vec2 (8 bytes, align 8)
 	population_cluster_params.MIGRATION_VECTOR: 8,    # vec2 (8 bytes, align 8)
@@ -368,105 +259,63 @@ const population_cluster_param_offsets : Dictionary[population_cluster_params, i
 	population_cluster_params.MAGIC_MUTATION_MAGNITUDE: 88  # float (4 bytes, align 4)
 }
 
-const POPULATION_CLUSTER_BYTE_SIZE : int = 96 # Padded to 16-byte alignment boundary (92 bytes rounded up)
+## Total byte stride (`96 B`, 92 bytes padded to 16-byte alignment) of one `PopulationCluster` in `std430`.
+const POPULATION_CLUSTER_BYTE_SIZE : int = 96
 
-# ==========================================
-# AUXILIARY SSBO STRUCT SIZES & REGISTRY
-# Per-domain lookup tables with custom struct layouts, bound at bindings 8–12.
-# Binding contract: _planning/event_logging_system_plan.md §2.7 (binding 8 is the
-# frozen geothermal POC's exclusively — no new writers; supersedes the retired
-# aux_ssbo_binding_impact_plan.md).
-# ==========================================
-
-## EventData struct (binding 8). 16 bytes per event. RETAINED for reference:
-## the EventBuffer itself was decommissioned with the geothermal POC at plan
-## §8.4 (biome causation rides in the BIOME_TYPE texel); if a future system
-## genuinely needs event-stream semantics, it re-derives this layout.
-## Layout: uint source_id, uint packed_data, vec2 world_pos.
-## std430: alignment 8 (from vec2), size 16 → array stride 16, no padding needed.
+## Byte stride (`16 B`: `uint source_id, uint packed_data, vec2 world_pos`) of a single `EventData` record.
 const EVENT_DATA_BYTE_SIZE : int = 16
 
-## SpellDefinition struct (binding 10). 32-byte array stride.
-## Layout: uint spell_id, uint effect_type, float magnitude, float radius, float duration,
-## uint _pad0 (reserved), uint _pad1, uint _pad2 (explicit padding).
-## NOTE: std430 does NOT round struct strides up to 16 — that is the std140 rule.
-## An all-scalar struct has natural std430 alignment 4 → array stride 24. The 32-byte
-## stride only holds because the GLSL struct DECLARES _pad1/_pad2 (the same explicit-
-## padding standard PopulationCluster follows). Keep GLSL and this constant in sync.
+## Byte stride (`32 B` with explicit `_pad1`/`_pad2` fields in `std430`) of a `SpellDefinition` in Binding 10.
 const SPELL_DEFINITION_BYTE_SIZE : int = 32
 
-## SpeciesArchetype struct (binding 11). Placeholder until the Designer finalizes the trait min/max layout.
-## Estimated ~160 bytes. Update this constant when the struct is finalized.
+## Byte stride (`176 B`) of a `SpeciesArchetype` trait-bounds record in Binding 11.
 const SPECIES_ARCHETYPE_BYTE_SIZE : int = 176
 
-## ImpactCurrency buffer half (binding 12). Small fixed buffer for the atomic
-## currency counter + future fields. Two halves are allocated (ping-pong).
+## Byte size (`256 B`) of one double-buffered `ImpactCurrency` SSBO half at Binding 12.
 const IMPACT_CURRENCY_BYTE_SIZE : int = 256
 
-## Maximum number of events the EventBuffer could hold before CPU extraction.
-## Historical (POC); retained alongside EVENT_DATA_BYTE_SIZE for reference.
+## Maximum event capacity of a single `EventBuffer` half.
 const event_buffer_max_events : int = 10000
 
-## Total byte size of one EventBuffer half: 16-byte header (uint counter + explicit
-## uint _header_pad[3] in GLSL so events[] starts at offset 16, not the natural
-## std430 offset 8) + events array.
+## Total byte size of one `EventBuffer` half (`16 B` aligned header + `event_buffer_max_events * 16 B`).
 const event_buffer_byte_size : int = 16 + (event_buffer_max_events * EVENT_DATA_BYTE_SIZE)
 
-## Total byte size of the ImpactCurrency buffer.
+## Alias for `IMPACT_CURRENCY_BYTE_SIZE` (`256 B`) used by buffer allocation helpers.
 const impact_currency_byte_size : int = IMPACT_CURRENCY_BYTE_SIZE
 
-# Maps a sim_layers domain to its aux SSBO struct size in bytes.
+## Maps a `sim_layers` domain to the `std430` struct byte stride of its auxiliary SSBO.
 const aux_ssbo_struct_sizes : Dictionary = {
 	sim_layers.PLAYER_ACTIONS: SPELL_DEFINITION_BYTE_SIZE,  # binding 10: SpellBook
 	sim_layers.FAUNA: SPECIES_ARCHETYPE_BYTE_SIZE,           # binding 11: ArchetypeLimits
 }
 
-# Maps a sim_layers domain to the number of elements in its aux SSBO.
+## Maps a `sim_layers` domain to the maximum element count allocated in its auxiliary SSBO.
 const aux_ssbo_counts : Dictionary = {
 	sim_layers.PLAYER_ACTIONS: 32,   # 32 spell bits
-	sim_layers.FAUNA: 200,           # max archetypes (designer-configurable)
+	sim_layers.FAUNA: 200,           # max archetypes
 }
 
-# Fixed binding numbers for auxiliary SSBOs. Referenced by GpuWorldState during uniform creation
-# and by GLSL shaders via layout(std430, set = 0, binding = N).
-# NOTE: binding 8 (EventBuffer) was decommissioned with the geothermal POC at
-# plan §8.4 — biome causation travels in the BIOME_TYPE texel's attribution
-# bits (§2.1), not through an event stream. Binding 9's ping-pong-partner
-# reservation is likewise retired; binding 8/9 are free for future aux SSBOs.
+## Fixed Set 0 uniform binding numbers for opt-in auxiliary SSBOs on `LayerSimulator`.
 const aux_ssbo_bindings : Dictionary = {
 	"SPELLBOOK": 10,          # Single-buffered, read-only at runtime (PLAYER_ACTIONS)
 	"ARCHETYPE_LIMITS": 11,   # Single-buffered, read-only at runtime (FAUNA)
-	"IMPACT_CURRENCY": 12,    # Double-buffered ping-pong, GPU-write / CPU-read (EVENT_LOGGING §2.7)
+	"IMPACT_CURRENCY": 12,    # Double-buffered ping-pong, GPU-write / CPU-read
 }
 
-# ==========================================
-# MASTER BIOME CATALOG (LANDSCAPE.BIOME_TYPE)
-# Index into these tables == biome ID written to the BIOME_TYPE texel's low byte
-# and baked into the shared GLSL centroid include (_assets/biome_globals.gdshaderinc).
-# The GLSL tables and these GPU-facing arrays describe the same 18 rows; the smoke
-# test (tests/test_biome_classification.gd) verifies the sync.
-# Plan: _planning/event_logging_system_plan.md §2.1/§2.3.
-# ==========================================
-
-## Texel format (r32ui, one per cell):
-##   bits [0..7]   biome ID (0..17 valid; 255 = BIOME_UNCLASSIFIED sentinel)
-##   bits [8..31]  attribution snapshot — 24-bit ACTION_KEY spell-presence bitmask
-##                 captured at classification time (0 = natural transition)
+## Bit shift (`8`) separating the low-byte biome ID from the 24-bit spell attribution mask in `BIOME_TYPE`.
 const BIOME_TEXEL_ATTRIBUTION_SHIFT : int = 8
-const BIOME_TEXEL_ATTRIBUTION_MASK : int = 0xFFFFFF00  # upper 24 bits
-const BIOME_TEXEL_ID_MASK : int = 0xFF                 # low byte
+## Bitmask (`0xFFFFFF00`) selecting the upper 24-bit `ACTION_KEY` attribution snapshot in a `BIOME_TYPE` texel.
+const BIOME_TEXEL_ATTRIBUTION_MASK : int = 0xFFFFFF00
+## Bitmask (`0xFF`) selecting the low-byte catalog biome ID in a `BIOME_TYPE` texel.
+const BIOME_TEXEL_ID_MASK : int = 0xFF
 
-## Sentinel: "not yet evaluated". Written ONLY as a deliberate repair fill
-## (legacy saves, §7.7); a healthy bootstrapped world contains only 0..17.
-## Any runtime read outside 0..17 is treated as unclassified and reclassified
-## immediately (no hysteresis).
+## Sentinel biome ID (`255`) indicating an uninitialized or legacy-repaired cell awaiting classification.
 const BIOME_UNCLASSIFIED : int = 255
 
-## Highest valid biome ID in the catalog (BIOME_PELAGIC_DEEP_OCEAN).
+## Highest valid biome ID (`17`, `PELAGIC_DEEP_OCEAN`) in the Master Biome Catalog.
 const BIOME_MAX_VALID_ID : int = 17
 
-## Biome IDs by catalog order (index == ID). Names kept beside the IDs for
-## AeonLog/naming work in Phase 3.
+## Master Biome Catalog mapping canonical biome names to their integer IDs (`0..17`).
 const biome_catalog_ids : Dictionary = {
 	"GLACIAL_ICE_SHEET": 0,
 	"POLAR_TUNDRA": 1,
@@ -488,43 +337,51 @@ const biome_catalog_ids : Dictionary = {
 	"PELAGIC_DEEP_OCEAN": 17,
 }
 
-# ==========================================
-# MAPPING GENERATORS
-# ==========================================
 
+## Builds the mapping from `sim_layers` domains to their flat slice indices in the Fine Float Grid.
 static func create_float_layer_indices_map() -> Dictionary[sim_layers, PackedInt32Array]:
 	return _build_map_from_names(float_sub_layer_names)
 
+
+## Builds the mapping from `sim_layers` domains to their flat slice indices in the Atomic Grid.
 static func create_atomic_layer_indices_map() -> Dictionary[sim_layers, PackedInt32Array]:
 	return _build_map_from_names(atomic_sub_layer_names)
 
+
+## Builds the identity mapping from `coarse_layers` enum values to their slice indices in the Coarse Grid.
 static func create_coarse_layer_indices_map() -> Dictionary[coarse_layers, int]:
+	# Map each valid coarse layer enum value (`0..COUNT-1`) to its integer slice index.
 	var map : Dictionary[coarse_layers, int] = {}
 	for cl : int in coarse_layers.values():
 		if cl == coarse_layers.COUNT:
 			continue
 		map[cl as coarse_layers] = cl
 	return map
-	
+
+
+## Builds the mapping from `sim_layers` domains to their `[start_offset, max_clusters]` bounds in the SSBO.
 static func create_ssbo_layer_indices_map() -> Dictionary[sim_layers, PackedInt32Array]:
 	var map : Dictionary[sim_layers, PackedInt32Array]
 	var current_offset : int = 0
+	# Assign contiguous `[offset, capacity]` ranges across all domains with non-zero cluster capacity.
 	for sl : int in sim_layers.values():
 		if sl < 0 : continue
 		var max_clusters : int = ssbo_layer_to_max_clusters[sl]
 		if max_clusters > 0:
-			# Storing [offset, capacity] for SSBOs instead of individual element indices
 			map[sl] = PackedInt32Array([current_offset, max_clusters])
 			current_offset += max_clusters
 		else:
 			map[sl] = PackedInt32Array()
 	return map
 
+
+## Assigns sequential flat texture-array slice indices to each domain's sub-layer list in `names_dict`.
 static func _build_map_from_names(names_dict: Dictionary) -> Dictionary[sim_layers, PackedInt32Array]:
 	var map : Dictionary[sim_layers, PackedInt32Array]
 	if not names_dict is Dictionary[sim_layers, PackedStringArray]:
 		push_error("Cannot build map from names_dict in Helpers.gd - names_dict is not [sim_layers, PackedStringArray]")
 		return {sim_layers.INVALID:[]}
+	# Walk domains in enum order and assign monotonically increasing slice indices.
 	var count : int = 0
 	for sl : int in sim_layers.values():
 		if sl < 0 : continue

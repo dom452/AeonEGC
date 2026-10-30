@@ -1,91 +1,60 @@
 extends Node
+## Raycasts the mouse cursor against an analytical unit sphere to resolve equirectangular
+## UV coordinates, discrete grid cells, shader hover globals, and player spell click events.
 class_name SphereCursorPicker
 
-## Detects cursor hover over the planetary sphere and resolves the surface point to an
-## equirectangular UV coordinate and the underlying Eulerian simulation cell.
-##
-## Picking plan. Heightmap displacement is intentionally IGNORED for now;
-## the analytical ray-sphere test assumes a perfect unit sphere of radius `sphere_radius`.
-##
-## This is a plain Node — attach it anywhere in the scene and assign `camera` + `planet`.
-## Call init_cursor_picker() once GameStateManager is ready (mirrors world_simulator's
-## initialise_sim_layers pattern). _process early-exits until init has run.
-
-# ============================================================
-#  Signals  (plan §4.1)
-# ============================================================
-
-## Fired whenever hover state changes: hover starts, hover stops, or the discrete cell changes.
-## For continuous sub-cell UV between cell changes, read `hover_data` directly each frame.
+## Emitted when hover starts, hover stops, or the hovered discrete grid cell changes.
 signal hover_changed(data: SphereHoverData)
 
-## Fired when the cursor enters a new discrete grid cell (also fires on the first hover).
+## Emitted when the cursor enters a new discrete grid cell (including initial hover entry).
 signal cell_entered(cell: Vector2i, uv: Vector2)
 
-## Fired when the cursor leaves a previously-entered discrete grid cell (also fires on hover stop).
+## Emitted when the cursor leaves a previously hovered discrete grid cell or exits the sphere.
 signal cell_exited(cell: Vector2i)
 
-## Fired on a mouse-button press while hovering a cell. `action_key` carries the
-## spell's action bit pattern (see PlayerSpell.get_action_bit_pattern()): 1u << slot
-## for placements, the target's bit for selective dispels, or WIPE_ALL (all bits) for
-## a whole-cell wipe. 0 only when a consumer emits without a spell — so 0 unambiguously
-## means "no action" on the wire. `action_value` sign encodes place (>= 0) vs.
-## wipe (< 0).
+## Emitted on mouse button press while hovering a cell with a non-null `spell`, carrying the
+## spell's `ACTION_KEY` bitmask (`1 << slot` or `WIPE_ALL`) and signed cost (`>= 0` place, `< 0` dispel).
 signal cell_clicked(cell: Vector2i, uv: Vector2, action_key : int, action_value : float)
 
-
-# ============================================================
-#  Exports
-# ============================================================
-
-## The Camera3D used to generate the pick ray. Required — this node is no longer a camera itself.
+## Active `Camera3D` used to project viewport mouse coordinates into a 3D pick ray.
 @export var camera : Camera3D
 
-## The planet node whose mesh we ray-test against. If null, the sphere is assumed centered
-## at world origin (Transform3D.IDENTITY) with radius `sphere_radius`.
+## Planet node whose transform defines the local space of the analytical sphere (`Transform3D.IDENTITY` if null).
 @export var planet : Node3D
 
-## Radius of the analytical sphere, in the planet's LOCAL space (plan §2.3 uses R = 1.0).
+## Radius of the analytical sphere in `planet`'s local coordinate space.
 @export var sphere_radius : float = 1.0
 
-## Simulation grid resolution used for UV→cell quantization. Defaults to 512×512 to match
-## `vis_terrain.gdshader`'s `u_grid_size`. init_cursor_picker() overrides this from WorldConfig.
+## Simulation grid dimensions (`Vector2i(world_width, world_height)`) used to quantize UV coordinates into cells.
 @export var grid_size : Vector2i = Vector2i(512, 512)
 
-## If true, prints a concise summary to the Output panel on cell change and on click.
-## This is console-only feedback for verifying the math; it is NOT the step-5 telemetry UI.
+## When true, prints a one-line summary to the console on cell hover transitions and clicks.
 @export var debug_log : bool = false
 
-## this is the currently selected spell. If no spell is selected, this is null. 
-## if null, the cell clicked signal will not emit. 
+## Currently selected `PlayerSpell` cast on click; when null, clicks do not emit `cell_clicked`.
 @export var spell : PlayerSpell 
 
-# ============================================================
-#  Runtime State
-# ============================================================
-
-## The live hover result. Always up-to-date each frame while hovering; cleared on hover stop.
+## Live per-frame hover telemetry container updated while hovering and cleared on exit.
 var hover_data : SphereHoverData
 
+## True while the cursor ray currently intersects the planetary sphere.
 var _is_hovering : bool = false
+## Discrete grid cell coordinates from the previous frame (`Vector2i(-1, -1)` when not hovering).
 var _prev_cell : Vector2i = Vector2i(-1, -1)
 
-## Set true by init_cursor_picker(). _process early-exits until this is true.
+## True once `init_cursor_picker()` has bound `camera`, `planet`, and `grid_size` from `GameStateManager`.
 var _is_initialised : bool = false
 
 
-## Allocates the live hover-data container. Called once on node entry.
+## Allocates `hover_data` and attempts initial binding via `init_cursor_picker()`.
 func _ready() -> void:
 	hover_data = SphereHoverData.new()
 	init_cursor_picker()
 
 
-## One-time initialisation. Mirrors world_simulator.initialise_sim_layers(): pulls world
-## dimensions from the live WorldConfig exactly once. Must be called externally (by whichever
-## system owns/spawns this picker) once GameStateManager is ready. _process early-exits until
-## this has run and set _is_initialised = true. If WorldConfig isn't ready yet, it logs and
-## leaves _is_initialised false so the caller can retry.
+## Binds `camera`, `planet`, and `grid_size` from `GameStateManager` and enables per-frame picking.
 func init_cursor_picker() -> void:
+	# Pull active camera, planet mesh, and world dimensions from GameStateManager.
 	var wc : WorldConfig = GameStateManager.world_config
 	camera = GameStateManager.instance.camera
 	planet = GameStateManager.instance.world
@@ -96,8 +65,10 @@ func init_cursor_picker() -> void:
 	_is_initialised = true
 
 
+## Projects the mouse cursor into a 3D ray each frame, intersects the planet sphere, updates `hover_data`
+## and shader hover uniforms, and emits cell enter/exit signals on discrete cell changes.
 func _process(_delta: float) -> void:
-	# Mirror world_simulator: do nothing until init_cursor_picker() has been called.
+	# Skip picking until `init_cursor_picker()` has succeeded and a valid camera is assigned.
 	if not _is_initialised:
 		return
 
@@ -105,16 +76,7 @@ func _process(_delta: float) -> void:
 		push_error("SphereCursorPicker: no valid Camera3D assigned. Aborting pick.")
 		return
 
-	# --- 2.1 Viewport mouse coordinate normalization (flexible SubViewport / full Window) ---
-	# IMPORTANT: camera.project_ray_origin/normal expect mouse coordinates in the CAMERA's
-	# own viewport space, not this node's viewport. When the camera lives inside a
-	# SubViewport (as in World_Gen.tscn, where the 3D scene sits under a
-	# SubViewportContainer), the root Window's mouse position is in the wrong space: a
-	# different scale plus a per-pixel offset. Passing it straight to project_ray_* makes
-	# the cast ray drift further off-target toward the far edge of the viewport until it
-	# leaves the frustum and the ray-sphere test misses — which looks exactly like "the
-	# right half of the sphere never registers a hover". Resolve the mouse position in the
-	# camera's viewport space instead.
+	# Resolve mouse coordinates in the camera's own viewport space (scaling through SubViewportContainer if present).
 	var cam_vp : Viewport = camera.get_viewport()
 	if cam_vp == null:
 		return
@@ -124,34 +86,28 @@ func _process(_delta: float) -> void:
 		var sv : SubViewport = cam_vp as SubViewport
 		var parent : Node = sv.get_parent()
 		if parent is SubViewportContainer:
-			# SubViewportContainer stretches the SubViewport's render to fit the container,
-			# so map the container-local mouse position back into SubViewport pixel space.
 			var svc : SubViewportContainer = parent as SubViewportContainer
 			var local_mouse : Vector2 = svc.get_local_mouse_position()
 			var svc_size : Vector2 = svc.size
 			if svc_size.x > 0.0 and svc_size.y > 0.0:
 				mouse_pos = local_mouse * (Vector2(sv.size) / svc_size)
 			else:
-				# Container not laid out yet — fall back to unscaled local coords.
 				mouse_pos = local_mouse
 		else:
-			# SubViewport without a SubViewportContainer parent: rely on its own tracking.
 			mouse_pos = sv.get_mouse_position()
 	else:
-		# Camera is in the root Window (or any non-SubViewport viewport): mouse position
-		# is already in the correct space.
 		mouse_pos = cam_vp.get_mouse_position()
 
+	# Clear hover state if the cursor lies outside the camera viewport bounds.
 	if not _is_mouse_in_viewport(cam_vp, mouse_pos):
 		_clear_hover()
 		return
 
-	# --- 2.2 Camera 3D ray generation ---
+	# Project the 2D viewport mouse position into a world-space ray origin and unit direction.
 	var ray_origin : Vector3 = camera.project_ray_origin(mouse_pos)
-	var ray_dir : Vector3 = camera.project_ray_normal(mouse_pos) # Normalized
+	var ray_dir : Vector3 = camera.project_ray_normal(mouse_pos)
 
-	# --- 2.3 Analytical ray-sphere intersection (ignoring heightmap displacement) ---
-	# Transform the ray into the planet's local space to support arbitrary sphere transforms.
+	# Transform the pick ray into the planet's local coordinate space and intersect the analytical sphere.
 	var inv : Transform3D = Transform3D.IDENTITY
 	var basis_inv : Basis = Basis.IDENTITY
 	if is_instance_valid(planet):
@@ -169,10 +125,8 @@ func _process(_delta: float) -> void:
 	var n_local : Vector3 = hit["normal"]
 	hover_data.hit_point_local = hit["point"]
 
-	# --- 2.4 Spherical-to-equirectangular UV mapping ---
+	# Convert the local surface normal into equirectangular UV, discrete cell coordinates, and lat/lon degrees.
 	hover_data.uv = sphere_normal_to_uv(n_local)
-
-	# --- 2.5 UV to Eulerian grid cell & geographic coordinates ---
 	hover_data.cell_coord = uv_to_cell_coord(hover_data.uv, grid_size)
 	hover_data.continuous_cell = Vector2(hover_data.uv.x * float(grid_size.x), hover_data.uv.y * float(grid_size.y))
 	hover_data.cell_index = hover_data.cell_coord.y * grid_size.x + hover_data.cell_coord.x
@@ -180,7 +134,7 @@ func _process(_delta: float) -> void:
 	hover_data.latitude_deg = latlon.x
 	hover_data.longitude_deg = latlon.y
 
-	# World-space hit point & normal (for any future 3D reticle; not used for UV).
+	# Transform local hit point and surface normal back to world space.
 	if is_instance_valid(planet):
 		hover_data.hit_point_world = planet.global_transform * hover_data.hit_point_local
 		hover_data.surface_normal = (planet.global_transform.basis * n_local).normalized()
@@ -188,10 +142,9 @@ func _process(_delta: float) -> void:
 		hover_data.hit_point_world = hover_data.hit_point_local
 		hover_data.surface_normal = n_local
 
-	# Refresh the live hover_data object in place.
 	hover_data.is_hovering = true
 
-	# --- write to global shader uniforms for visualisation ---
+	# Publish hover cell, active flag, and UV to global shader parameters for terrain highlighting.
 	RenderingServer.global_shader_parameter_set(
 		StringName("u_hover_cell_coord"), 
 		hover_data.cell_coord
@@ -205,9 +158,8 @@ func _process(_delta: float) -> void:
 		hover_data.uv
 		)
 
-	# --- Discrete cell change detection & signals ---
+	# Emit enter/exit/changed signals when hover starts or crosses into a different discrete grid cell.
 	if not _is_hovering:
-		# Hover just started.
 		_is_hovering = true
 		_prev_cell = hover_data.cell_coord
 		hover_changed.emit(hover_data)
@@ -223,27 +175,16 @@ func _process(_delta: float) -> void:
 			hover_changed.emit(hover_data)
 			if debug_log:
 				_print_hover("MOVE", hover_data.cell_coord, hover_data.uv, latlon)
-		# else: same cell, sub-cell UV drift only — no signal (read hover_data for continuous).
-		# Still keep the object fresh (already updated above) for any polling consumer.
 
 
-## Handles mouse-button presses. If a click lands on a hovered cell AND a spell is
-## selected, emits `cell_clicked` carrying the cell, UV, the spell's action bit pattern,
-## and spell.cost. The bit pattern comes from PlayerSpell.get_action_bit_pattern():
-## placement spells send their own presence bit (1u << slot_index); dispel tools send
-## the TARGET's bit (selective dispel) or WIPE_ALL (clear the whole cell). The VALUE
-## SIGN carries place vs. wipe: negative cost for dispel tools, non-negative otherwise.
-## Without a selected spell the click is silently ignored (no GPU write occurs).
+## Emits `cell_clicked` with the active `spell`'s bitmask and signed cost when a mouse button is pressed while hovering.
 func _input(event: InputEvent) -> void:
-	# Fire cell_clicked on mouse-button press while currently hovering a cell.
+	# Relay mouse-button presses on a hovered cell when an active PlayerSpell is selected.
 	if event is InputEventMouseButton:
 		var mb : InputEventMouseButton = event as InputEventMouseButton
 		if mb.pressed and _is_hovering:
 			if spell:
-				# The shader consumes only the SIGN of action_value (place >= 0, wipe < 0);
-				# the magnitude is the spell's cost, carried for future use. Dispel tools
-				# force a strictly negative value even at cost 0 — a bare -cost would emit
-				# -0.0, which compares >= 0 in IEEE and would silently become a placement.
+				# Encode placement spells as non-negative cost and dispel tools as strictly negative (`-1.0 - cost` avoids `-0.0`).
 				var relayed_cost : float = absf(float(spell.cost))
 				print(spell.spell_name)
 				if spell.is_dispel:
@@ -257,72 +198,61 @@ func _input(event: InputEvent) -> void:
 						Vector2(hover_data.latitude_deg, hover_data.longitude_deg)
 					)
 
-# ============================================================
-#  Hover state management
-# ============================================================
 
-## Clears the hover state (cursor left the viewport or missed the sphere) and emits the
-## `cell_exited` + `hover_changed` signals so downstream consumers can react.
+## Resets hover state when the cursor misses the sphere or leaves the viewport and emits `cell_exited` and `hover_changed`.
 func _clear_hover() -> void:
 	if not _is_hovering:
 		return
+	# Clear active hover flags and notify listeners of the exited cell.
 	_is_hovering = false
 	var old : Vector2i = _prev_cell
 	_prev_cell = Vector2i(-1, -1)
 
 	hover_data.is_hovering = false
-	# Keep stale uv/cell for one read if a consumer polls after exit; clear index/geo to be safe.
 	hover_data.cell_index = 0
 
 	cell_exited.emit(old)
 	hover_changed.emit(hover_data)
 
-# ============================================================
-#  Viewport helpers (plan §2.1 — flexible SubViewport / full Window)
-# ============================================================
 
-## Returns the mouse position in this node's viewport-local coordinate system.
+## Returns the mouse position in `vp`'s local coordinate system.
 static func get_viewport_mouse(vp : Viewport) -> Vector2:
 	return vp.get_mouse_position()
 
-## Bounds check that works for both a SubViewport and the root Window (full-viewport case).
-## The base `Viewport` class exposes no `size` property, so we resolve it per concrete type.
+
+## Returns true if `mouse_pos` lies inside the pixel bounds of `vp`.
 static func _is_mouse_in_viewport(vp : Viewport, mouse_pos : Vector2) -> bool:
 	var size : Vector2 = _get_viewport_size(vp)
 	return Rect2(Vector2.ZERO, size).has_point(mouse_pos)
 
+
+## Returns the pixel dimensions of `vp` across `SubViewport`, `Window`, and generic `Viewport` subclasses.
 static func _get_viewport_size(vp : Viewport) -> Vector2:
 	if vp is SubViewport:
 		return Vector2((vp as SubViewport).size)
 	var as_window : Window = vp as Window
 	if as_window != null:
 		return Vector2(as_window.size)
-	# Fallback for any other Viewport subclass.
 	return vp.get_visible_rect().size
 
-# ============================================================
-#  Sphere math utilities (plan §2.3 – 2.5, Phase 1)
-# ============================================================
 
-## Analytical ray-sphere intersection for a sphere centered at the local origin.
-## `ray_dir` should be normalized. Returns an empty Dictionary on a miss, otherwise:
-##   { "t": float, "point": Vector3, "normal": Vector3 }  (all in LOCAL space).
+## Intersects a normalized local ray `(ray_origin, ray_dir)` against an origin-centered sphere of `radius`,
+## returning `{"t": float, "point": Vector3, "normal": Vector3}` or `{}` on a miss.
 static func ray_sphere_intersect(ray_origin : Vector3, ray_dir : Vector3, radius : float) -> Dictionary:
-	# Solves:  t² + 2(O·D)t + (|O|² − R²) = 0
-	# Let h = O·D, c = |O|² − R².  Discriminant d = h² − c.
+	# Solve the quadratic ray-sphere equation `t^2 + 2(O.D)t + (|O|^2 - R^2) = 0`.
 	var h : float = ray_origin.dot(ray_dir)
 	var c : float = ray_origin.dot(ray_origin) - radius * radius
 	var disc : float = h * h - c
 	if disc < 0.0:
-		return {} # Ray misses the sphere entirely.
+		return {}
 
+	# Select the nearest positive intersection `t` along the ray.
 	var sqrt_disc : float = sqrt(disc)
-	var t : float = -h - sqrt_disc # Nearest intersection (front face).
+	var t : float = -h - sqrt_disc
 	if t < 0.0:
-		# Camera is inside the sphere or sphere is behind the near plane; try the far intersection.
 		t = -h + sqrt_disc
 		if t < 0.0:
-			return {} # Sphere entirely behind the ray origin.
+			return {}
 
 	var point : Vector3 = ray_origin + ray_dir * t
 	return {
@@ -331,47 +261,37 @@ static func ray_sphere_intersect(ray_origin : Vector3, ray_dir : Vector3, radius
 		"normal": point.normalized(),
 	}
 
-## Maps a local unit surface normal to an equirectangular UV in [0.0, 1.0]².
-##   +Y (north pole) → V = 0.0,  −Y (south pole) → V = 1.0
-##   +X (prime meridian) → U = 0.0 (wraps to 1.0 at the −X seam)
-##
-## Longitude DIRECTION: the sphere mesh's authored equirectangular UVs map
-## increasing-U to the rotation sense opposite of atan2(Z, X). Using atan2(Z, X)
-## anchors U=0 correctly (+X) but inverts the direction — the hover indicator slides
-## away from the cursor and only reconverges at U=0.5 (180°). Negating the angle
-## (atan2(-Z, X) == -atan2(Z, X)) preserves the U=0 anchor while flipping the
-## rotational sense to match the mesh, so the indicator tracks the cursor.
-static func sphere_normal_to_uv(normal : Vector3) -> Vector2:
-	var ny : float = clampf(normal.y, -1.0, 1.0)
-	var phi : float = asin(ny)             # Latitude  ∈ [−π/2, +π/2]
-	var v : float = 0.5 - (phi / PI)       # [0.0, 1.0]
 
-	# theta = atan2(-Z, X): matches the mesh UV rotational direction (U increases the
-	# opposite way to atan2(Z, X)). See function docstring for the full derivation.
-	var theta : float = atan2(-normal.z, normal.x) # Longitude ∈ [−π, +π]
-	var u : float = wrapf(theta / TAU, 0.0, 1.0)    # [0.0, 1.0)
+## Maps a local unit sphere normal to an equirectangular UV in `[0, 1)^2` (`+Y` north pole → `V = 0`,
+## `-Y` south pole → `V = 1`, `atan2(-Z, X)` matching the planet mesh's longitude winding).
+static func sphere_normal_to_uv(normal : Vector3) -> Vector2:
+	# Convert Y elevation to latitude `phi` and map north-to-south into `V` in `[0.0, 1.0]`.
+	var ny : float = clampf(normal.y, -1.0, 1.0)
+	var phi : float = asin(ny)
+	var v : float = 0.5 - (phi / PI)
+
+	# Compute longitude `theta = atan2(-z, x)` to match the sphere mesh's U winding direction.
+	var theta : float = atan2(-normal.z, normal.x)
+	var u : float = wrapf(theta / TAU, 0.0, 1.0)
 
 	return Vector2(u, v)
 
-## Quantizes a UV coordinate to a discrete simulation grid cell, clamped to valid bounds.
+
+## Quantizes an equirectangular `uv` in `[0, 1]^2` into a clamped discrete grid cell `Vector2i(x, y)`.
 static func uv_to_cell_coord(uv : Vector2, grid : Vector2i) -> Vector2i:
 	var cx : int = clampi(int(uv.x * float(grid.x)), 0, grid.x - 1)
 	var cy : int = clampi(int(uv.y * float(grid.y)), 0, grid.y - 1)
 	return Vector2i(cx, cy)
 
-## Converts a UV coordinate to human-readable latitude/longitude in degrees.
-##   Latitude:  +90.0° N (north pole) … −90.0° S (south pole)
-##   Longitude: −180.0° … +180.0° (seam at U = 0.0 / 1.0)
+
+## Converts an equirectangular `uv` into `Vector2(latitude_deg, longitude_deg)` (`[-90..+90]`, `[-180..+180]`).
 static func uv_to_lat_lon(uv : Vector2) -> Vector2:
 	var latitude : float = (0.5 - uv.y) * 180.0
 	var longitude : float = (uv.x * 360.0) - 180.0
 	return Vector2(latitude, longitude)
 
 
-
-
-## Console debug helper — prints a one-line summary of a hover/click event. Only fires
-## when `debug_log` is true. Not part of the step-5 telemetry UI.
+## Prints a one-line diagnostic summary of a hover or click event when `debug_log` is enabled.
 func _print_hover(tag : String, cell : Vector2i, uv : Vector2, latlon : Vector2) -> void:
 	print("[%s] cell=(%d, %d) idx=%d  UV=(%.4f, %.4f)  Lat=%.2f° Lon=%.2f°" % [
 		tag, cell.x, cell.y, cell.y * grid_size.x + cell.x,

@@ -1,67 +1,74 @@
 extends Resource
+## Configures and manages a single compute shader pass in the world generation pipeline,
+## compiling SPIR-V shaders, binding input/output textures, and packing push constants.
 class_name LayerGenerator
-## Base class for specific world generation passes utilizing Compute Shaders. Subclassed to specify target buffers (Float vs Atomic).
 
-## The overarching system this layer belongs to.
+## The simulation system category (e.g. TOPOGRAPHY_GENERATION, FLUID_DYNAMICS) this pass belongs to.
 @export var system_name : Helpers.system_names
-## whether to run the shader. For debugging.
+## Toggle allowing designers to disable this specific generation pass for debugging.
 @export var is_enabled : bool = true
-## If true, workgroup dimensions will be calculated using coarse_resolution instead of world_width.
+## When true, computes workgroups for a 64x64 coarse resolution grid instead of the 512x512 fine grid.
 @export var is_coarse : bool = false
-## The compiled SPIR-V compute shader to execute for generation mapping.
+## The compiled SPIR-V compute shader file executed on the GPU.
 @export var shader_resource : RDShaderFile
-## Array of Push_Constant resources used to pass variables to the shader.
+## Ordered list of push constants passed to the shader (must fit within 128 bytes total).
 @export var push_constants_resources : Array[Push_Constant]:
 	set(val):
 		push_constants_resources = val
 		if val.size() > 32:
 			push_warning("Push constant array length exceeds 32. This may lead to 128-byte limit issues on some hardware.")
-## Number of times this layer generator should be dispatched.
+## Number of times to iteratively dispatch this compute pass during world generation.
 @export var repeat_times : int = 1
-## Array of CustomImage resources to be passed as uniform textures.
+## Optional procedural noise images baked and passed to the shader as input textures on Binding 15.
 @export var custom_images : Array[CustomImage]
+## GPU texture array RID holding the custom images passed on Binding 15.
 var custom_textures : RID
+## Texture uniform descriptor mapping `custom_textures` to Set 0 Binding 15.
 var custom_tex_uniform : RDUniform
 
-## write layer indices held here, used for uniform construction. These are given by the Gpu World Sim
-## important: these CANNOT be the same as other write_layers from other gpu work orders. 
-## these are unique. 
+## Array of unique write layer indices modified by this generation pass.
 var write_layer_indices : PackedInt32Array
 
-## Compute Shader properties. Set at runtime. 
+## Reference to the low-level RenderingDevice API.
 var rd : RenderingDevice
-## generated once at initialisation() out of the shader_resource
+## GPU shader resource RID created from the compiled SPIR-V code.
 var shader : RID
-## always request with the write index to return the correct configuration for the frame. 
+## Uniform set RID binding all input/output textures and buffers to Set 0.
 var uniform_set : RID
-## generated once at initialisation() after the shader is compiled. 
+## GPU compute pipeline RID linking the compiled shader.
 var pipeline : RID
 
+## Number of threads per workgroup along each axis (8x8 = 64 threads per GPU workgroup).
 var workgroup_size : float = 8.0
 
-# cached workgroup sizes. 
+## Number of workgroups to dispatch horizontally across the grid (`width / 8`).
 var w : int
+## Number of workgroups to dispatch vertically across the grid (`height / 8`).
 var h : int
 
+## Pre-allocated byte buffer packing all push constants with std430 alignment rules.
 var _cached_push_constants_buffer : PackedByteArray
 
-# Maps each Push_Constant resource to its starting byte offset in the buffer
+## Lookup table mapping each Push_Constant resource to its starting byte offset in `_cached_push_constants_buffer`.
 var _push_constant_offsets : Dictionary
 
-## assigns render device, the prepares shader, pipeline and uniform set array.
-## Initializes the render device, calculates workgroup sizes, sets up custom images, and prepares the shader and pipeline.
+
+## Prepares workgroup dispatch dimensions, compiles custom noise images, builds the shader pipeline, and caches push constants.
 func initialise_layer_generator(render_device : RenderingDevice) -> void:
 	rd = render_device
+	# Determine grid resolution (64x64 for coarse dynamics, 512x512 for fine terrain/water).
 	var width : int = GameStateManager.world_config.world_width
 	var height : int = GameStateManager.world_config.world_height
 	if is_coarse:
 		width = int(width / 8.0)
 		height = int(height / 8.0)
+	# Divide resolution by 8x8 thread group size to determine how many workgroups to launch across the grid.
 	w = ceil(float(width) / workgroup_size)
 	h = ceil(float(height) / workgroup_size)
 	for ci : CustomImage in custom_images:
 		ci.set_image_params(width, height)
 		
+	# Build noise textures, compile shader, create compute pipeline, and bind Set 0 uniforms.
 	setup_custom_image_textures()
 	setup_custom_texture_uniforms()
 	prepare_shader()
@@ -69,38 +76,43 @@ func initialise_layer_generator(render_device : RenderingDevice) -> void:
 	prepare_uniform_set()
 	cache_push_constants_layout()
 
-## Returns the complete unified uniform binding list for world generation passes.
+
+## Builds the unified list of Set 0 uniform descriptors (Bindings 0-7, 15) available to world generation shaders.
 func _get_target_uniforms() -> Array[RDUniform]:
 	var ws : GpuWorldState = GameStateManager.current_world_state
+	# Include standard fine float read/write textures and the atomic integer grid.
 	var uniforms : Array[RDUniform] = [
-		ws.float_write_uniforms[0], # binding = 0: Fine Float Write
-		ws.float_read_uniforms[0],  # binding = 1: Fine Float Read
-		ws.atomic_uniform           # binding = 2: Atomic Grid RW
+		ws.float_write_uniforms[0],
+		ws.float_read_uniforms[0],
+		ws.atomic_uniform
 	]
+	# Include SSBO population clusters if active.
 	if ws.ssbo_write_uniforms.size() > 0:
-		uniforms.append(ws.ssbo_write_uniforms[0]) # binding = 3: SSBO Write
-		uniforms.append(ws.ssbo_read_uniforms[0])  # binding = 4: SSBO Read
+		uniforms.append(ws.ssbo_write_uniforms[0])
+		uniforms.append(ws.ssbo_read_uniforms[0])
+	# Include normalized atomic visualization texture.
 	if ws.atomic_visual_uniform != null:
-		uniforms.append(ws.atomic_visual_uniform)  # binding = 5: Atomic Visual
+		uniforms.append(ws.atomic_visual_uniform)
+	# Include coarse dynamics read/write textures.
 	if ws.coarse_write_uniforms.size() > 0:
-		uniforms.append(ws.coarse_write_uniforms[0]) # binding = 6: Coarse Write
-		uniforms.append(ws.coarse_read_uniforms[0])  # binding = 7: Coarse Read
+		uniforms.append(ws.coarse_write_uniforms[0])
+		uniforms.append(ws.coarse_read_uniforms[0])
+	# Include custom procedural noise textures at Binding 15.
 	if custom_tex_uniform != null:
-		uniforms.append(custom_tex_uniform)          # binding = 15: Custom Noise Textures Read
+		uniforms.append(custom_tex_uniform)
 	return uniforms
 
-## Calculates the memory offsets and aligns push constants into a PackedByteArray according to std140/std430 rules.
+
+## Pre-calculates std430 byte offsets and alignment padding for all push constants, ensuring total size <= 128 bytes.
 func cache_push_constants_layout() -> void:
-	# 1. Start sizing the main buffer:
 	var current_size : int = 0
 	
-	# 2. Iterate through user push constants to calculate sizes, alignments, and record offsets
+	# Compute byte strides and required padding: 4 bytes for scalars, 8 for vec2, 16 for vec3/vec4.
 	for push_const : Push_Constant in push_constants_resources:
 		if not push_const:
 			continue
 			
 		if push_const.type == TYPE_NIL:
-			# If the type hasn't been set by Godot's setter yet, determine it from get_value()
 			var val : Variant = push_const.get_value()
 			push_const.type = typeof(val) as Variant.Type
 
@@ -112,17 +124,17 @@ func cache_push_constants_layout() -> void:
 			TYPE_VECTOR2, TYPE_VECTOR2I:
 				remainder = current_size % 8
 				if remainder > 0:
-					current_size += (8 - remainder) # Pad to 8-byte alignment
+					current_size += (8 - remainder)
 				_push_constant_offsets[push_const] = current_size
 				current_size += 8
 			TYPE_VECTOR3, TYPE_VECTOR3I:
 				remainder = current_size % 16
 				if remainder > 0:
-					current_size += (16 - remainder) # Pad to 16-byte alignment
+					current_size += (16 - remainder)
 				_push_constant_offsets[push_const] = current_size
 				current_size += 16
 				
-	# 3. Final padding for Vulkan requirement (must be multiple of 16)
+	# Align final buffer size to a multiple of 16 bytes as required by Vulkan push constant limits.
 	var final_remainder : int = current_size % 16
 	if final_remainder > 0:
 		current_size += (16 - final_remainder)
@@ -131,23 +143,30 @@ func cache_push_constants_layout() -> void:
 		push_error("Push constants buffer size exceeds 128-byte limit! GPU crash imminent. Aborting caching.")
 		return
 		
-	# 4. Allocate the persistent buffer
+	# Allocate the persistent cached byte buffer.
 	_cached_push_constants_buffer.resize(current_size)
 
+
+## Compiles the SPIR-V shader binary into a GPU shader resource.
 func prepare_shader() -> void:
+	# Extract SPIR-V bytecodes and upload to RenderingDevice.
 	var spirv : RDShaderSPIRV = shader_resource.get_spirv()
 	if not spirv:
 		push_error(shader_resource.resource_name + " failed to compile.")
 	shader = rd.shader_create_from_spirv(spirv)
 
+
+## Creates the GPU compute pipeline linking the compiled shader.
 func prepare_pipeline() -> void:
 	pipeline = rd.compute_pipeline_create(shader)
 
+
+## Bakes custom procedural noise images into a 2D texture array on the GPU.
 func setup_custom_image_textures() -> void:
 	var tx_format : RDTextureFormat = RDTextureFormat.new()
 	tx_format.texture_type = rd.TEXTURE_TYPE_2D_ARRAY
 	
-	# Texture2DArrayRD requires at least 2 layers in Godot, even if only 1 is used
+	# Godot Texture2DArrayRD requires at least 2 layers in the array format even if only 1 image is provided.
 	tx_format.array_layers = maxi(2, custom_images.size())
 	var width : int = GameStateManager.world_config.world_width
 	var height : int = GameStateManager.world_config.world_height
@@ -156,10 +175,10 @@ func setup_custom_image_textures() -> void:
 		height = int(GameStateManager.world_config.world_height / 8.0)
 	tx_format.width = width
 	tx_format.height = height
-	# single float channel
 	tx_format.format = rd.DATA_FORMAT_R32_SFLOAT
 	tx_format.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_UPDATE_BIT | RenderingDevice.TEXTURE_USAGE_STORAGE_BIT
 	
+	# Generate raw byte data for each custom image slice.
 	var image_data_array : Array[PackedByteArray] = []
 	var empty_layer : PackedByteArray = PackedByteArray()
 	empty_layer.resize(tx_format.width * tx_format.height * 4)
@@ -180,11 +199,11 @@ func setup_custom_image_textures() -> void:
 		while image_data_array.size() < 2:
 			image_data_array.append(empty_layer)
 	
-	#need to create a view to specify the number of layers in the array, even though we're only using 1 layer here
 	var view : RDTextureView = RDTextureView.new()
-	# create the actual texture
 	custom_textures = rd.texture_create(tx_format, view, image_data_array)
 
+
+## Creates the RDUniform descriptor mapping `custom_textures` to Set 0 Binding 15.
 func setup_custom_texture_uniforms() -> void:
 	custom_tex_uniform = RDUniform.new()
 	custom_tex_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
@@ -193,6 +212,7 @@ func setup_custom_texture_uniforms() -> void:
 	return
 
 
+## Binds all required texture and buffer uniforms to descriptor Set 0 on the GPU.
 func prepare_uniform_set() -> void:
 	var uniforms : Array[RDUniform] = _get_target_uniforms()
 	uniform_set = rd.uniform_set_create(
@@ -202,9 +222,11 @@ func prepare_uniform_set() -> void:
 	)
 	return
 
-## Dispatches the compute shader pipeline.
+
+## Submits `count` iterative dispatches of this compute shader into the GPU command list.
 func dispatch(count : int) -> void:
 	var compute_list : int = rd.compute_list_begin()
+	# Execute the shader `count` times, inserting a barrier between steps so subsequent passes see previous writes.
 	for c : int in range(count):
 		rd.compute_list_bind_compute_pipeline(compute_list, pipeline)
 		rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
@@ -214,17 +236,17 @@ func dispatch(count : int) -> void:
 		if c < count+1:
 			rd.compute_list_add_barrier(compute_list)
 	rd.compute_list_end()
-	
-# PUSH CONSTANTS
+
+
+## Packs updated push constant values into the cached byte buffer using their pre-calculated std430 offsets.
 func get_push_constants_buffer() -> PackedByteArray:
-	# Update dynamic user push constants at their pre-calculated offsets
+	# Update each push constant value at its designated byte offset.
 	for push_const : Push_Constant in push_constants_resources:
 		if not push_const or not _push_constant_offsets.has(push_const):
 			continue
 		
 		var current_val : Variant = push_const.get_value()
 		var offset : int = _push_constant_offsets[push_const]
-		
 		
 		match push_const.type:
 			TYPE_INT:
@@ -257,10 +279,11 @@ func get_push_constants_buffer() -> PackedByteArray:
 				_cached_push_constants_buffer.encode_s32(offset + 8, pc.z)
 				
 	return _cached_push_constants_buffer
-	
 
+
+## Frees compiled pipelines, uniform sets, shaders, and noise textures from GPU memory.
 func cleanup() -> void:
-	# freeing the shaders automatically frees the pipelines and uniform sets that include them
+	# Free GPU descriptor sets, compute pipelines, shader objects, and noise textures.
 	if rd.uniform_set_is_valid(uniform_set):
 		rd.free_rid(uniform_set)
 	if rd.compute_pipeline_is_valid(pipeline):
@@ -270,3 +293,4 @@ func cleanup() -> void:
 	if rd.texture_is_valid(custom_textures):
 		rd.free_rid(custom_textures)
 	print(Helpers.system_names.find_key(system_name) + " cleaned up.")
+

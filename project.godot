@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Aeon"
+config/name="WorldSim"
 run/main_scene="uid://dquc32auncxxg"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
@@ -34,7 +34,7 @@ window/size/viewport_height=1080
 
 [dotnet]
 
-project/assembly_name="Aeon"
+project/assembly_name="WorldSim"
 
 [editor_plugins]
 

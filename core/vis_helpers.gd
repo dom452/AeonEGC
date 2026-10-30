@@ -1,22 +1,12 @@
+## Computes `[min, max]` normalization bounds, scales, and offsets for visualizing
+## fine float, atomic, and coarse simulation layers in debug and terrain shaders.
 class_name VisHelpers
 extends RefCounted
 
-## Analyzes the physical parameters defined in WorldConfig and maps them to the expected visualization ranges
-## Returns Vector2(min_expected_value, max_expected_value)
-##
-## UNIT REFERENCE (from helpers.gd forensic analysis):
-##   Height-Units (BEDROCK, SEDIMENT, WATER_LIQUID/ICE): 1.0 = 100 meters (hectometers)
-##   Temperature (GROUND_TEMP, WATER_TEMP, AIR_TEMP): Degrees Celsius (°C)
-##   Flora biomass: Dimensionless [0, K] where K is carrying capacity (grass≤1, shrub≤3, tree≤5, aquatic≤2)
-##   Wind: SWE horizontal velocity (grid-cells/frame), terrain-aware
-##   Pressure: SWE column height h (pressure ∝ g*h); h ≈ 1.0 at rest
-##   Humidity/Rain/Snow: Normalized ratios
-##   Sunlight: Lambertian insolation [0, 1]
-##
-## NOTE: Grid cell area is NOT 100m×100m. Default Earth config gives ~78 km/cell.
-##       Water values are DEPTH units, not volume (GL).
+
+## Returns `Vector2(min_val, max_val)` in physical/domain units for a fine float or atomic layer index.
 static func get_layer_min_max(absolute_layer_index: int, is_atomic: bool = false) -> Vector2:
-	# Reverse engineer the sim_layer and sub_layer from the absolute grid index
+	# Resolve the owning `sim_layers` enum and sub-layer offset from the flat texture array index.
 	var found_layer : Helpers.sim_layers = Helpers.sim_layers.INVALID
 	var found_sub_layer : int = -1
 	
@@ -33,64 +23,62 @@ static func get_layer_min_max(absolute_layer_index: int, is_atomic: bool = false
 	var min_val : float = 0.0
 	var max_val : float = 1.0
 	
+	# Read temperature extremes from the active WorldConfig for thermal layer normalization.
 	var wc : WorldConfig = GameStateManager.world_config
 	var p_temp : float = wc.pole_temp if wc else -30.0
 	var e_temp : float = wc.equator_temp if wc else 40.0
 	var min_temp : float = min(p_temp, e_temp)
 	var max_temp : float = max(p_temp, e_temp)
 	
-	# min_temp = -5.0
-	# max_temp = 20.0
-	
+	# Select normalization bounds for atomic sub-layers (after multiplier division in the visualizer pass).
 	if is_atomic:
 		match found_layer:
 			Helpers.sim_layers.WATER:
 				match found_sub_layer:
-					0: # LIQUID_VOLUME
+					0: # LIQUID_VOLUME (depth in hectometers)
 						max_val = wc.max_elevation if wc else 200.0
-					1: # ICE_VOLUME
+					1: # ICE_VOLUME (depth in hectometers, up to 2x thermal insulation cap)
 						max_val = wc.thermal_ice_influence * 2.0 if wc else 0.1
 			Helpers.sim_layers.FLORA:
 				match found_sub_layer:
-					0: # GRASSES
-						max_val = 1.0 # K_grass base
-					1: # SHRUBS
-						max_val = 3.0 # K_shrub base
-					2: # TREES_CANOPY
-						max_val = 5.0 # K_tree base
-					3: # AQUATIC
-						max_val = 2.0 # K_aquatic base
+					0: # GRASSES (carrying capacity K = 1.0)
+						max_val = 1.0
+					1: # SHRUBS (carrying capacity K = 3.0)
+						max_val = 3.0
+					2: # TREES_CANOPY (carrying capacity K = 5.0)
+						max_val = 5.0
+					3: # AQUATIC (carrying capacity K = 2.0)
+						max_val = 2.0
 					4: # FLORA_DETRITUS
 						max_val = 1.0
 			Helpers.sim_layers.LANDSCAPE:
 				match found_sub_layer:
 					1: # SOIL_NUTRIENTS
 						max_val = 5.0
-					3: # BIOME_TYPE — packed ID (low byte) + attribution bits. Categorical:
-						# visualizers decode the ID byte (÷255), never the raw texel.
+					3: # BIOME_TYPE (low byte decoded against 0..255)
 						max_val = float(Helpers.BIOME_UNCLASSIFIED)
+	# Select normalization bounds for fine float sub-layers.
 	else:
 		match found_layer:
 			Helpers.sim_layers.LANDSCAPE:
 				match found_sub_layer:
-					0: # BEDROCK_HEIGHT
+					0: # BEDROCK_HEIGHT (hectometers)
 						max_val = wc.max_elevation if wc else 200.0
-					3: # SEDIMENT_HEIGHT
+					3: # SEDIMENT_HEIGHT (hectometers)
 						max_val = wc.max_sediment_depth if wc else 1.0
 					1, 2: # SLOPE.X, SLOPE.Y
 						min_val = -1.0
 						max_val = 1.0
-					4: # GROUND_TEMP
+					4: # GROUND_TEMP (degrees Celsius)
 						min_val = min_temp
 						max_val = max_temp
 			Helpers.sim_layers.WATER:
 				match found_sub_layer:
-					0: # WATER_LIQUID_HEIGHT
-						# All water on the map pools in valleys, meaning deep oceans can far exceed the base sea level threshold.
+					0: # WATER_LIQUID_HEIGHT (hectometers; deep basins can approach max_elevation)
 						max_val = wc.max_elevation if wc else 200.0
-					1: # WATER_ICE_HEIGHT
-						max_val = wc.thermal_ice_influence * 2.0 if wc else 0.1 # Visualize up to 2x the thermal threshold cap
-					2, 3: # NET_VELOCITY.X, Y
+					1: # WATER_ICE_HEIGHT (hectometers; up to 2x thermal insulation cap)
+						max_val = wc.thermal_ice_influence * 2.0 if wc else 0.1
+					2, 3: # NET_VELOCITY.X, NET_VELOCITY.Y
 						var max_flow : float = wc.max_flow_rate if wc else 1.0
 						min_val = -max_flow
 						max_val = max_flow
@@ -102,31 +90,27 @@ static func get_layer_min_max(absolute_layer_index: int, is_atomic: bool = false
 						var max_flow : float = wc.max_flow_rate if wc else 1.0
 						min_val = 0.0
 						max_val = max_flow
-					6: # WATER_TEMP
+					6: # WATER_TEMP (degrees Celsius)
 						min_val = min_temp
 						max_val = max_temp
 			Helpers.sim_layers.ENERGY:
 				match found_sub_layer:
-					0: # SUNLIGHT
+					0: # SUNLIGHT (normalized insolation [0, 1])
 						max_val = 1.0
-					1: # TIDAL_FORCE
+					1: # TIDAL_FORCE (dimensionless [-1, 1])
 						min_val = -1.0
 						max_val = 1.0
 			Helpers.sim_layers.ATMOSPHERE:
 				match found_sub_layer:
-					0, 1: # WIND.X, Y — SWE horizontal velocity
-						# SWE velocity = hu/h. With h~2-4 and strong pressure gradients,
-						# velocities can exceed ±1.0. Range [-2, 2] gives full headroom.
+					0, 1: # WIND.X, WIND.Y (SWE horizontal velocity in grid-cells/frame)
 						min_val = -2.0
 						max_val = 2.0 
-					2: # AIR_TEMP
+					2: # AIR_TEMP (degrees Celsius)
 						min_val = min_temp
 						max_val = max_temp
 					3, 4, 5: # HUMIDITY, RAIN, SNOW
 						max_val = 1.0
-					6: # PRESSURE — SWE column height h (pressure ∝ g*h)
-					# h ≈ 1.0 at rest. Thermal + water cycle can push to ~2-3 at poles.
-					# Range [0, 4] gives headroom so poles show bright but don't clip to white.
+					6: # PRESSURE (SWE column height h; ~1.0 at rest)
 						min_val = 0.0
 						max_val = 3.0
 			Helpers.sim_layers.FLORA:
@@ -136,17 +120,24 @@ static func get_layer_min_max(absolute_layer_index: int, is_atomic: bool = false
 						
 	return Vector2(min_val, max_val)
 
+
+## Returns the multiplicative scale factor `1.0 / (max - min)` that maps a fine layer's range to `[0, 1]`.
 static func get_scale_for_layer(absolute_layer_index: int, is_atomic: bool = false) -> float:
 	var bounds : Vector2 = get_layer_min_max(absolute_layer_index, is_atomic)
 	var range_val : float = bounds.y - bounds.x
 	if range_val == 0.0: return 1.0
 	return 1.0 / range_val
 
+
+## Returns the additive offset `-min` applied before scaling to normalize a fine layer to `[0, 1]`.
 static func get_offset_for_layer(absolute_layer_index: int, is_atomic: bool = false) -> float:
 	var bounds : Vector2 = get_layer_min_max(absolute_layer_index, is_atomic)
 	return -bounds.x
 
+
+## Returns `Vector2(min_val, max_val)` in physical/domain units for a coarse dynamics grid layer (`Helpers.coarse_layers`).
 static func get_coarse_layer_min_max(coarse_layer_idx: int) -> Vector2:
+	# Read temperature and elevation bounds from the active WorldConfig.
 	var wc : WorldConfig = GameStateManager.world_config
 	var p_temp : float = wc.pole_temp if wc else -30.0
 	var e_temp : float = wc.equator_temp if wc else 40.0
@@ -154,6 +145,7 @@ static func get_coarse_layer_min_max(coarse_layer_idx: int) -> Vector2:
 	var max_temp : float = max(p_temp, e_temp)
 	var max_elev : float = wc.max_elevation if wc else 200.0
 
+	# Return the expected display range for the requested coarse SWE layer.
 	match coarse_layer_idx:
 		Helpers.coarse_layers.H_UPPER:
 			return Vector2(0.0, 2.0)
@@ -171,12 +163,16 @@ static func get_coarse_layer_min_max(coarse_layer_idx: int) -> Vector2:
 			return Vector2(0.0, 30.0)
 	return Vector2(0.0, 1.0)
 
+
+## Returns the multiplicative scale factor `1.0 / (max - min)` that maps a coarse layer's range to `[0, 1]`.
 static func get_coarse_scale_for_layer(coarse_layer_idx: int) -> float:
 	var bounds : Vector2 = get_coarse_layer_min_max(coarse_layer_idx)
 	var range_val : float = bounds.y - bounds.x
 	if range_val == 0.0: return 1.0
 	return 1.0 / range_val
 
+
+## Returns the additive offset `-min` applied before scaling to normalize a coarse layer to `[0, 1]`.
 static func get_coarse_offset_for_layer(coarse_layer_idx: int) -> float:
 	var bounds : Vector2 = get_coarse_layer_min_max(coarse_layer_idx)
 	return -bounds.x

@@ -1,18 +1,21 @@
 @abstract
 extends Node
+## Abstract base class representing a GPU-managed world system attached to RenderingDevice.
 class_name GpuWorld
 
+## Configuration resource specifying world dimensions, scale, and simulation parameters.
 var world_config : WorldConfig
 
-## Reference to the global RenderingServer rendering device API.
+## Reference to the Godot low-level RenderingDevice API used to manage GPU textures and compute shaders.
 var rd : RenderingDevice
 
-## Failsafe bool tracking if the user is running an unsupported OpenGL backend.
+## True if the active rendering driver is OpenGL, which cannot run compute shaders.
 var is_opengl : bool = false:
 	get:
 		if is_opengl:
 			push_error("Rendering Driver is OpenGL. Rendering Device cannot be created.")
 		return is_opengl
 
-## The globally active VRAM representation of the world.
+## Active GPU world state managing ping-pong texture arrays and storage buffers in VRAM.
 var world_state : GpuWorldState
+

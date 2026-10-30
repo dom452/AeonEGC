@@ -1,61 +1,29 @@
+## Owns the ordered registry of placement `PlayerSpell` resources, assigns their
+## `slot_index` (`0..31`), and packs/uploads their 32-byte `std430` `SpellDefinition`
+## structs into the `SpellBook` auxiliary SSBO (Binding 10).
 class_name SpellbookManager
 extends Resource
 
-## Owns the ordered registry of PlayerSpell resources and mirrors it into the SpellBook
-## aux SSBO (binding 10) at load. A Resource (not RefCounted) so it is savable and its
-## spells array is inspectable/editable/configurable in the editor.
-##
-## DERIVED IDENTITY — the single source of truth for spell identity is ARRAY ORDER:
-##   - The position of a spell in `spells` IS its SSBO slot (slot_index 0..31).
-##   - The spell's presence bit in the ACTION_KEY grid bitmask is (1u << slot_index).
-##   - PlayerSpell.slot_index is written back at load (never authored in .tres files).
-## Dispel tools (is_dispel = true) sit OUTSIDE the array: they consume no slot and are
-## never mirrored into the SSBO.
-##
-## CAPACITY: one u32 presence word per cell caps the book at 32 placed spells
-## (Helpers.aux_ssbo_counts). When the book outgrows that, add a second bitmask
-## sub-layer (ACTION_KEY_EXT) per _planning/spell_system_tech_plan.md §2.3 — slots and
-## effect dispatch are orthogonal, so nothing else changes.
-##
-## SAVE-STABILITY NOTE: saves that store ACTION_KEY bitmasks decode correctly only
-## against the same array order. The save system is currently non-functional; when it
-## is revived, persisting this resource (or its slot mapping) alongside the bitmask
-## restores portability across spellbook edits.
-##
-## Byte layout (std430, 32-byte stride — MUST stay in sync with
-## Helpers.SPELL_DEFINITION_BYTE_SIZE and the SpellDefinition block in the GLSL
-## consumers, e.g. spell_effects_sim.glsl):
-##   uint  spell_id     @ 0   (== slot_index)
-##   uint  effect_type  @ 4
-##   float magnitude    @ 8
-##   float radius       @ 12
-##   float duration     @ 16
-##   uint  _pad0        @ 20
-##   uint  _pad1        @ 24  (explicit padding keeps the std430 stride at 32)
-##   uint  _pad2        @ 28
-
-## The ordered spell registry. Order is identity: array position == SSBO slot ==
-## ACTION_KEY bit. Reordering changes what stored bitmasks mean.
-## Dispel tools must NOT be added here (they are slotless by design).
+## Ordered array of placement `PlayerSpell` resources where array index equals SSBO slot (`0..31`)
+## and `ACTION_KEY` bit position (`1 << slot_index`); slotless dispel tools must not be added here.
 @export var spells : Array[PlayerSpell] = [
 	preload("res://spells/geothermal_vent_spell.tres"),
 ]
 
 
-## Derives slot indices from array order, validates, packs, and uploads the spellbook.
-## Safe to call repeatedly (full re-upload). Call once from GameStateManager init.
+## Assigns `slot_index` from array order and uploads the packed `SpellBook` byte buffer to `GpuWorldState`.
 func load_spellbook() -> void:
+	# Skip upload when running headlessly without an allocated GPU auxiliary SSBO.
 	var ws : GpuWorldState = GameStateManager.current_world_state
 	if not ws or not ws.aux_ssbo_buffers.has(Helpers.sim_layers.PLAYER_ACTIONS):
-		# In headless/no-RD boots GpuWorldState cannot allocate buffers — skip quietly.
 		return
 	_assign_slots()
 	ws.upload_aux_ssbo_data(Helpers.sim_layers.PLAYER_ACTIONS, build_spellbook_bytes())
 
 
-## Writes slot_index back onto every placed spell (array position order). Pure CPU-side
-## state derivation — safe in editor and headless runs.
+## Writes each placement spell's array index into its `slot_index` property, logging an error if a dispel tool is present.
 func _assign_slots() -> void:
+	# Assign `slot_index = i` for every valid placement spell in `spells`.
 	for i : int in spells.size():
 		var spell : PlayerSpell = spells[i]
 		if spell == null:
@@ -66,8 +34,7 @@ func _assign_slots() -> void:
 		spell.slot_index = i
 
 
-## Packs the spellbook byte array from array order. Pure function (no GpuWorldState
-## access) so the layout is unit-testable headlessly.
+## Packs up to 32 `spells` into a 1024-byte (`32 * 32 B`) `std430` `PackedByteArray` matching `SpellDefinition`.
 func build_spellbook_bytes() -> PackedByteArray:
 	var count : int = Helpers.aux_ssbo_counts[Helpers.sim_layers.PLAYER_ACTIONS]
 	var stride : int = Helpers.SPELL_DEFINITION_BYTE_SIZE
@@ -75,16 +42,16 @@ func build_spellbook_bytes() -> PackedByteArray:
 	data.resize(count * stride)
 	data.fill(0)
 
+	# Warn if `spells` exceeds the 32-bit capacity of a single `r32ui` `ACTION_KEY` word.
 	if spells.size() > count:
 		push_error("SpellbookManager: %d spells exceeds the %d-slot capacity of one u32 presence word. The first %d are mirrored; add a second bitmask sub-layer for more." % [spells.size(), count, count])
 
+	# Encode `[spell_id, effect_type, magnitude, radius, duration, _pad0, _pad1, _pad2]` at 32-byte stride.
 	for i : int in mini(spells.size(), count):
 		var spell : PlayerSpell = spells[i]
 		if spell == null or spell.is_dispel:
 			continue
 		if spell.slot_index != i:
-			# build_spellbook_bytes may be called before load_spellbook (tests) —
-			# derive on the fly so packing never disagrees with array order.
 			spell.slot_index = i
 
 		var base : int = i * stride
@@ -93,14 +60,13 @@ func build_spellbook_bytes() -> PackedByteArray:
 		data.encode_float(base + 8, spell.magnitude)
 		data.encode_float(base + 12, spell.radius)
 		data.encode_float(base + 16, spell.duration)
-		# Offsets 20..28 stay zero (reserved / explicit padding).
 
 	return data
 
 
-## Re-uploads a single spell's 32-byte slice (level-up path: edit the PlayerSpell,
-## then call this with its slot). No-op if the world state is unavailable.
+## Re-packs and uploads a single 32-byte `SpellDefinition` slice at `slot` in the `SpellBook` SSBO after runtime edits.
 func upload_spell_slice(slot : int) -> void:
+	# Validate that the GPU auxiliary SSBO exists and `slot` is within `spells` bounds.
 	var ws : GpuWorldState = GameStateManager.current_world_state
 	if not ws or not ws.aux_ssbo_buffers.has(Helpers.sim_layers.PLAYER_ACTIONS):
 		push_error("SpellbookManager: no aux SSBO buffer — cannot upload spell slice.")
@@ -113,6 +79,7 @@ func upload_spell_slice(slot : int) -> void:
 	if spell == null:
 		return
 
+	# Encode the 32-byte `SpellDefinition` record and upload it to `slot * stride` in Binding 10.
 	var stride : int = Helpers.SPELL_DEFINITION_BYTE_SIZE
 	var data : PackedByteArray = PackedByteArray()
 	data.resize(stride)

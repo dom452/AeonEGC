@@ -1,24 +1,18 @@
 extends Node
+## Debug-scene only (reusable as a template for production spell-hotbar UI): binds number-row
+## hotkeys (`1..9`), dispel (`X`), and clear (`Q`) to `GameStateManager.cursor_picker.spell`.
 class_name DebugSpellSelector
 
-## POC debug spell selector: hotkeys assign spells to GameStateManager.cursor_picker,
-## and print the current selection to the console. Exists only so the geothermal-vent
-## POC tests (T-S2..T-S6) are executable without a full spell-selection UI
-## (spell_system_tech_plan.md Phase D).
-##
-## Hotkeys (number row): 1..9 select placed spells from the ACTIVE SPELLBOOK
-## (GameStateManager.spellbook_manager.spells — the single source of truth, so the
-## hotkey order always matches SSBO slot order). X selects the dispel tool (clears the
-## whole cell). Q clears the selection.
-
-## The dispel tool (slotless — dispels live outside the spellbook array).
+## Slotless whole-cell dispel `PlayerSpell` assigned to the cursor picker when pressing `X`.
 @export var dispel_tool : PlayerSpell = preload("res://spells/wipe_spell.tres")
 
 
+## Prints the initial spell selection state when entering the scene tree.
 func _ready() -> void:
 	_print_selection()
 
 
+## Maps keys `1..9` to `SpellbookManager.spells[0..8]`, `X` to `dispel_tool`, and `Q` to `null` on `cursor_picker`.
 func _unhandled_key_input(event : InputEvent) -> void:
 	if event is InputEventKey:
 		var key : InputEventKey = event as InputEventKey
@@ -28,9 +22,9 @@ func _unhandled_key_input(event : InputEvent) -> void:
 		if not is_instance_valid(picker):
 			return
 
+		# Select a placement spell by slot (`1..9`), select the dispel tool (`X`), or clear selection (`Q`).
 		var book : SpellbookManager = GameStateManager.spellbook_manager
 		if key.keycode >= KEY_1 and key.keycode <= KEY_9:
-			# 1..9 select book spells by array position (== SSBO slot).
 			if book != null:
 				var idx : int = key.keycode - KEY_1
 				if idx < book.spells.size() and book.spells[idx] != null:
@@ -44,6 +38,7 @@ func _unhandled_key_input(event : InputEvent) -> void:
 			_print_selection()
 
 
+## Prints the currently active `PlayerSpell` and its SSBO slot or dispel status to the console.
 func _print_selection() -> void:
 	var picker : SphereCursorPicker = GameStateManager.cursor_picker
 	if is_instance_valid(picker) and picker.spell:

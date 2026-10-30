@@ -1,46 +1,43 @@
 extends Node
+## Debug-scene only (reusable as a template for production data-lens / map-mode UI):
+## populates R/G/B `OptionButton` dropdowns with all float and atomic simulation layers and
+## relays normalization uniforms (`u_channel_*`, `u_debug_layer_mode`) to `SphereVisualiser.mat_terrain`.
 class_name LayerChannelUI 
 
-## Dropdown-driven RGB layer-channel visualizer for the planet sphere.
-##
-## Wire 3 OptionButton nodes (one per R/G/B channel) and the SphereVisualiser via
-## the @export vars in the inspector. The script populates each dropdown with
-## "Flat 1.0", "Flat 0.0", and every float + atomic simulation layer. On selection
-## it sets the `u_channel_*` array uniforms on the planet's ShaderMaterial, and
-## toggles `u_debug_layer_mode` when any channel departs from the Flat 1.0 default.
-##
-## The UI layout itself is authored by hand in the scene — this script only handles
-## dropdown population and shader-parameter relay.
-
-## The planet visualiser whose `mat_terrain` ShaderMaterial receives the uniforms.
+## Target `SphereVisualiser` whose `mat_terrain` `ShaderMaterial` receives the channel uniforms.
 @export var sphere_visualiser : SphereVisualiser
 
-## R channel dropdown. Metadata per item: { src: int, z: int, is_atomic: bool }.
+## Dropdown selecting the simulation layer mapped to the Red visualization channel.
 @export var menu_r : OptionButton
 
-## G channel dropdown.
+## Dropdown selecting the simulation layer mapped to the Green visualization channel.
 @export var menu_g : OptionButton
 
-## B channel dropdown.
+## Dropdown selecting the simulation layer mapped to the Blue visualization channel.
 @export var menu_b : OptionButton
 
+## Cached reference to `sphere_visualiser.mat_terrain` once initialized.
 var mat_terrain : ShaderMaterial
 
-# Per-channel state arrays (pushed to shader on change). Index 0=R, 1=G, 2=B.
-var _src_arr    : PackedInt32Array = [0, 0, 0]      # all Flat 1.0
+## Per-channel source type (`0 = Flat 1.0`, `1 = Flat 0.0`, `2 = Float grid`, `3 = Atomic grid`) for `[R, G, B]`.
+var _src_arr    : PackedInt32Array = [0, 0, 0]
+## Per-channel texture-array slice index `z` for `[R, G, B]`.
 var _layer_arr  : PackedInt32Array = [0, 0, 0]
+## Per-channel `VisHelpers` normalization scale factor for `[R, G, B]`.
 var _scale_arr  : PackedFloat32Array = [1.0, 1.0, 1.0]
+## Per-channel `VisHelpers` normalization offset for `[R, G, B]`.
 var _offset_arr : PackedFloat32Array = [0.0, 0.0, 0.0]
 
+## Ordered `[menu_r, menu_g, menu_b]` array indexed by channel (`0..2`).
 var _menus : Array[OptionButton] = []
+## True once `mat_terrain` has been acquired and initial channel uniforms have been pushed.
 var _initialised : bool = false
 
 
+## Populates the R/G/B dropdown menus once `GameStateManager` layer maps are ready and enables polling for `mat_terrain`.
 func _ready() -> void:
 	_menus = [menu_r, menu_g, menu_b]
-	# Populate dropdowns as soon as GameStateManager layer maps are available.
-	# The SphereVisualiser may not have created mat_terrain yet (it awaits
-	# game_state_manager.ready), so we poll for that in _process().
+	# Populate dropdowns immediately if world state exists, or wait for `game_state_manager_initialised`.
 	if GameStateManager.current_world_state:
 		_populate_all_menus()
 	else:
@@ -48,10 +45,12 @@ func _ready() -> void:
 	set_process(true)
 
 
+## Populates all channel dropdowns once `GameStateManager` finishes initialization.
 func _on_gsm_ready() -> void:
 	_populate_all_menus()
 
 
+## Polls until `sphere_visualiser.mat_terrain` is available, pushes initial channel uniforms, and disables `_process`.
 func _process(_delta: float) -> void:
 	if _initialised:
 		return
@@ -63,30 +62,23 @@ func _process(_delta: float) -> void:
 	set_process(false)
 
 
-# ============================================================
-#  Dropdown population
-# ============================================================
-
-## Populates all 3 OptionButtons with identical content: Flat 1.0, Flat 0.0,
-## then every float layer, then every atomic layer. Connects item_selected.
+## Populates each R/G/B `OptionButton` with flat constants, float layers, and atomic layers, and connects `item_selected`.
 func _populate_all_menus() -> void:
 	for channel_idx : int in range(_menus.size()):
 		var btn : OptionButton = _menus[channel_idx]
 		if not btn:
 			continue
 		_populate_menu(btn)
-		btn.select(0)  # Flat 1.0 by default
-		# Use a lambda capturing channel_idx so each menu routes to the right slot.
+		btn.select(0)
 		btn.item_selected.connect(_on_channel_selected.bind(channel_idx))
 
 
-## Fills a single OptionButton. Item metadata format: { src, z, is_atomic }.
-##   src 0 = Flat 1.0, 1 = Flat 0.0, 2 = float array, 3 = atomic array.
+## Fills `btn` with `"Flat 1.0"`, `"Flat 0.0"`, all float sub-layers, and all atomic sub-layers with `{src, z, is_atomic}` metadata.
 static func _populate_menu(btn : OptionButton) -> void:
 	btn.clear()
 	var idx : int = 0
 
-	# --- Flat options ---
+	# Add constant 1.0 and 0.0 channel options.
 	btn.add_item("Flat 1.0")
 	btn.set_item_metadata(idx, { "src": 0 })
 	idx += 1
@@ -95,7 +87,7 @@ static func _populate_menu(btn : OptionButton) -> void:
 	btn.set_item_metadata(idx, { "src": 1 })
 	idx += 1
 
-	# --- Float layers ---
+	# Append every fine float grid sub-layer in domain order.
 	for sim_layer : Helpers.sim_layers in Helpers.sim_layers.values():
 		if sim_layer == Helpers.sim_layers.INVALID:
 			continue
@@ -109,7 +101,7 @@ static func _populate_menu(btn : OptionButton) -> void:
 			btn.set_item_metadata(idx, { "src": 2, "z": float_indices[j], "is_atomic": false })
 			idx += 1
 
-	# --- Atomic layers ---
+	# Append every atomic grid sub-layer in domain order.
 	for sim_layer : Helpers.sim_layers in Helpers.sim_layers.values():
 		if sim_layer == Helpers.sim_layers.INVALID:
 			continue
@@ -124,10 +116,7 @@ static func _populate_menu(btn : OptionButton) -> void:
 			idx += 1
 
 
-# ============================================================
-#  Selection handling
-# ============================================================
-
+## Updates the source, slice index, and `VisHelpers` scale/offset for `channel_idx` and refreshes `mat_terrain` uniforms.
 func _on_channel_selected(_index : int, channel_idx : int) -> void:
 	if channel_idx < 0 or channel_idx >= _menus.size():
 		return
@@ -135,6 +124,7 @@ func _on_channel_selected(_index : int, channel_idx : int) -> void:
 	if not btn:
 		return
 
+	# Read the selected item's `{src, z}` metadata and compute normalization scale/offset for float layers.
 	var meta : Dictionary = btn.get_item_metadata(btn.selected)
 	var src : int = meta.get("src", 0)
 	var z : int = meta.get("z", 0)
@@ -142,15 +132,14 @@ func _on_channel_selected(_index : int, channel_idx : int) -> void:
 	_src_arr[channel_idx] = src
 	_layer_arr[channel_idx] = z
 
-	if src == 2:  # float — apply VisHelpers normalization
+	if src == 2:
 		_scale_arr[channel_idx] = VisHelpers.get_scale_for_layer(z, false)
 		_offset_arr[channel_idx] = VisHelpers.get_offset_for_layer(z, false)
-	else:         # flat or atomic — no normalization
+	else:
 		_scale_arr[channel_idx] = 1.0
 		_offset_arr[channel_idx] = 0.0
 
-	# Auto-toggle debug mode: on when any channel is not Flat 1.0 (src != 0),
-	# off when all channels are back to Flat 1.0.
+	# Enable `u_debug_layer_mode` whenever any R/G/B channel is set to a non-default source (`src != 0`).
 	var any_active : bool = false
 	for i : int in range(_src_arr.size()):
 		if _src_arr[i] != 0:
@@ -162,10 +151,7 @@ func _on_channel_selected(_index : int, channel_idx : int) -> void:
 		_push_to_shader()
 
 
-# ============================================================
-#  Shader relay
-# ============================================================
-
+## Writes `_src_arr`, `_layer_arr`, `_scale_arr`, and `_offset_arr` to `mat_terrain`'s `u_channel_*` uniforms.
 func _push_to_shader() -> void:
 	if not mat_terrain:
 		return

@@ -1,30 +1,13 @@
 extends RefCounted
+## Awards diminishing-return Impact Currency bounties when player-attributed or
+## neighbor-cascaded cells transition to a strictly higher ecological biome tier.
 class_name BiomeEconomy
 
-## Impact Currency payouts from biome transitions
-## (_planning/event_logging_system_plan.md §4.1/§4.2 — Phase 5 final form).
-##
-## Currency = TierMultiplier(new_biome) x CausationBonus(attribution), awarded
-## as an instantaneous lump-sum bounty on FORWARD ecological colonization.
-##
-## Guardrails (§4.2):
-##   1. AFK immunity: currency is edge-triggered on TRANSITION — a settled vent
-##      pays nothing.
-##   2. Reverse-dispel: Tier(new) <= Tier(old) pays 0 — equal tiers included
-##      (the plan's explicit tie resolution: equal-tier transitions pay 0).
-##   3. Cycle farming: per-cell diminishing returns — payout scales by
-##      0.5^(years since last payout), floored at 0, so repeated place-dispel
-##      cycles converge to zero income.
-##
-## Causation (§4.1): the attribution snapshot rides in the BIOME_TYPE texel's
-## upper 24 bits (captured by the GPU at classification time). 1.0x if the
-## cell's own bits are non-zero; 0.5x if an orthogonal NEIGHBOR's bits are
-## non-zero (free — the diff already owns the full layer copy); 0.0x natural.
-
+## Emitted when a cell transition awards a positive Impact Currency payout.
 signal currency_gained(amount : int, cell : Vector2i, new_biome : int)
 
-## Explicit tier ordering (§4.2 guardrail 3's requirement). Ties pay 0.
-##   0 = barren baselines, 1 = pioneer, 2 = advanced, 3 = climax/complex.
+## Ecological succession tier (0 = barren, 1 = pioneer, 2 = advanced, 3 = climax)
+## indexed by biome ID (0..17). Equal or lower tier transitions pay 0.
 const TIERS : PackedInt32Array = [
 	0,  # 0  Glacial Ice Sheet      — barren
 	1,  # 1  Polar Tundra           — pioneer
@@ -46,38 +29,37 @@ const TIERS : PackedInt32Array = [
 	1,  # 17 Pelagic Deep Ocean     — pioneer
 ]
 
-## Currency per tier (§4.1 TierMultiplier).
+## Base Impact Currency bounty indexed by succession tier (0..3).
 const TIER_CURRENCY : PackedInt32Array = [0, 10, 35, 75]
 
-## Diminishing-return half-life in years (§4.2 guardrail 3): payout scales by
-## 0.5^(years since the cell's last payout). A forward re-attempt inside the
-## SAME year consumes one extra half-life per repeat — 0.5^(years-since) alone
-## cannot decay a same-year place-dispel loop (years_since stays 0), and the
-## plan's guardrail requires cycle income to converge to zero.
+## Half-life in elapsed simulation years for per-cell repeat payout decay.
 const PAYOUT_HALF_LIFE_YEARS : float = 1.0
 
-## The player's wallet.
+## Current total Impact Currency held in the player's wallet.
 var currency : int = 0
 
-## cell_index -> year of last payout (diminishing returns bookkeeping).
-var _last_paid_year : Dictionary = {}
+## Maps flat `cell_index` to the simulation year of its most recent payout.
+var _last_paid_year : Dictionary[int, int] = {}
 
-## cell_index -> cumulative payout attempts (cycle-farm decay exponent).
-var _last_paid_repeats : Dictionary = {}
+## Maps flat `cell_index` to its cumulative forward payout-attempt count.
+var _last_paid_repeats : Dictionary[int, int] = {}
 
+## Total cell count of the bound simulation grid.
 var _cell_count : int = 0
 
 
+## Initializes the economy tracker for a grid of `cell_count` cells and resets
+## per-cell payout decay history.
 func bind(cell_count : int) -> void:
+	# Store the active grid size and clear prior cell payout records.
 	_cell_count = cell_count
 	_last_paid_year.clear()
 	_last_paid_repeats.clear()
 
 
-## Processes one transition batch (wired to the snapshot manager's signal).
-## `shadow_provider` is a Callable(int) -> int returning the shadow texel for
-## neighbor-attribution lookups (§4.1 implementation note: free, the diff owns
-## the copy). `world_width`/`world_height` resolve neighbor indices.
+## Evaluates a batch of `BiomeTransitionRecord`s, awarding diminishing-return
+## Impact Currency for player-caused or neighbor-cascaded upgrades to a higher
+## biome tier and emitting `currency_gained` for each positive payout.
 func process_batch(transitions : Array, shadow_provider : Callable, world_width : int, world_height : int) -> void:
 	for t : BiomeTransitionRecord in transitions:
 		var cell_index : int = t.cell_index
@@ -85,20 +67,18 @@ func process_batch(transitions : Array, shadow_provider : Callable, world_width 
 		var new_biome : int = t.new_biome
 		var attribution : int = t.attribution_bits
 
-		# §4.2 guardrail 2: no reversion bounty (and equal tiers pay 0).
-		# NOTE: a reversal does NOT touch the payout clock — §4.2 tracks the
-		# last-PAID year, and only real payouts advance it. Refreshing on
-		# dispel would reset the decay curve and re-open the farm loop.
+		# Skip reversions and lateral equal-tier transitions without advancing the cell's decay clock.
 		var tier_old : int = _tier_of(old_biome)
 		var tier_new : int = _tier_of(new_biome)
 		if tier_new <= tier_old:
 			continue
 
+		# Skip target tiers that carry zero base bounty.
 		var base : int = TIER_CURRENCY[tier_new]
 		if base <= 0:
 			continue
 
-		# §4.1 CausationBonus from the texel bits.
+		# Assign 1.0x causation for direct cell attribution, 0.5x for orthogonal neighbor cascade, or 0.0x for natural shifts.
 		var causation : float = 0.0
 		if attribution != 0:
 			causation = 1.0
@@ -107,53 +87,57 @@ func process_batch(transitions : Array, shadow_provider : Callable, world_width 
 			if neighbor_bits != 0:
 				causation = 0.5
 		if causation <= 0.0:
-			continue  # natural fluctuation pays nothing (§4.2 guardrail 1)
+			continue
 
-		# §4.2 guardrail 3: per-cell diminishing returns. A cell that has never
-		# paid pays in full. The exponent is (years since last payout) + (the
-		# cell's cumulative payout-attempt count), so EVERY forward attempt —
-		# same-year farm loops AND annual re-colonization churn — compounds
-		# the decay monotonically toward zero income (the plan's guardrail).
-		# Natural one-time colonization is unaffected (first attempt decays 0
-		# half-lives); a cell that flips every year decays as 35, 8, 2, 0...
+		# Look up the cell's prior payout history; first-time colonizations suffer zero decay.
 		var first_attempt : bool = not _last_paid_year.has(cell_index)
 		var last_paid : int = _last_paid_year.get(cell_index, GameStateManager.elapsed_years)
 		var attempts : int = _last_paid_repeats.get(cell_index, 0)
 		var years_since : float = maxf(float(GameStateManager.elapsed_years - last_paid), 0.0)
+
+		# Compound half-life decay across both elapsed years and cumulative attempts so
+		# same-year place-dispel loops and annual re-colonization churn both decay to zero.
 		var exponent : float = (0.0 if first_attempt else (years_since / PAYOUT_HALF_LIFE_YEARS + 1.0)) + float(attempts)
 		var decay : float = pow(0.5, exponent)
-		var payout : float = float(base) * causation * decay
-		var amount : int = floori(payout)
+		var amount : int = floori(float(base) * causation * decay)
+
+		# Record the payout attempt on the cell's decay clock before checking if the floored payout reached zero.
 		_last_paid_year[cell_index] = GameStateManager.elapsed_years
 		_last_paid_repeats[cell_index] = attempts + 1
 		if amount <= 0:
 			continue
 
+		# Credit the player's wallet and notify listeners of the cell's payout.
 		currency += amount
-		_last_paid_year[cell_index] = GameStateManager.elapsed_years
 		@warning_ignore("integer_division")
 		currency_gained.emit(amount, Vector2i(cell_index % world_width, cell_index / world_width), new_biome)
 
 
+## Returns the ecological succession tier (0 = barren .. 3 = climax) for `biome_id`,
+## or 0 if the ID is out of range.
 func _tier_of(biome_id : int) -> int:
+	# Guard against out-of-range biome IDs.
 	if biome_id < 0 or biome_id >= TIERS.size():
 		return 0
 	return TIERS[biome_id]
 
 
-## ORs the attribution bits of the cell's 4 orthogonal neighbors from the
-## snapshot shadow (§4.1: downstream cascade detection).
+## Returns the bitwise OR of the 24-bit spell-attribution masks across the 4
+## orthogonal neighbors of `cell_index` (with East-West wrapping and clamped poles).
 func _neighbor_attribution(cell_index : int, shadow_provider : Callable, world_width : int, world_height : int) -> int:
+	# Convert flat cell index to 2D grid coordinates.
 	var x : int = cell_index % world_width
 	@warning_ignore("integer_division")
 	var y : int = cell_index / world_width
 	var bits : int = 0
+	# Collect East/West wrapped neighbors and North/South pole-clamped neighbors.
 	var neighbors : Array[int] = [
 		y * world_width + ((x + 1) % world_width),
 		y * world_width + ((x - 1 + world_width) % world_width),
 	]
 	if y > 0: neighbors.append((y - 1) * world_width + x)
 	if y < world_height - 1: neighbors.append((y + 1) * world_width + x)
+	# Unpack and accumulate the upper 24-bit spell attribution mask from each neighbor texel.
 	for nidx : int in neighbors:
 		var texel : int = shadow_provider.call(nidx)
 		bits |= (texel >> Helpers.BIOME_TEXEL_ATTRIBUTION_SHIFT) & 0xFFFFFF

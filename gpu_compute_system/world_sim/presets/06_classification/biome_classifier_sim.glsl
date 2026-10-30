@@ -1,32 +1,21 @@
 #[compute]
 #version 450
 
-// ==========================================
-// BIOME CLASSIFIER (Runtime, End-of-Frame)
-// ==========================================
-// Nearest-centroid biome classification over the 6D feature vector with
-// hysteresis gating and the 255-sentinel self-heal guard (plan section 2.4/2.6).
-// Pure imageStore to BIOME_TYPE (r32ui, binding 2): low byte = biome ID,
-// upper 24 bits = ACTION_KEY attribution snapshot. NO event emission, NO
-// atomic counters (plan section 1, principle 3 — binding 8's EventBuffer was
-// decommissioned with the geothermal POC at §8.4; biome causation rides in
-// this texel's attribution bits instead).
-//
-// MUST be dispatched AFTER flora_ecology_sim in the sim_layers array
-// (end-of-frame — it must observe the most current world state).
-// execution_steps = 1 (no sub-cycling).
-//
-// Single-writer discipline: one plain full-texel imageStore per cell
-// (pattern per REF_impact_detector_sim.glsl, minus event emission). The
-// seeding generator is the only other writer, and only during generation.
-// ==========================================
+// =============================================================================
+// BIOME CLASSIFIER SIMULATION
+// Compute pass that classifies cell biomes from local 6D environmental conditions with hysteresis gating.
+// Physical units: 6D feature vector (temperature in °C, humidity [0, 1], water depth in meters,
+//                vegetation cover [0, 1], salinity [0, 1]) evaluated against 18 canonical biome centroids.
+// Bindings: Reads climate from read_tex (Set 0, Binding 1) and flora/salinity/action keys from atomic_tex (Set 0, Binding 2);
+//           Writes 32-bit biome texel (attribution bits in upper 24 bits, biome ID in low 8 bits) to atomic_tex (Set 0, Binding 2).
+// =============================================================================
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // === UNIFIED SIMULATION UNIFORM BINDINGS ===
-// 0: Fine Float Write (r16f) | 1: Fine Float Read (r16f) | 2: Atomic RW (r32ui)
-// 3: SSBO Write (std430)     | 4: SSBO Read (std430)     | 5: Atomic Visual (r16f)
-// 6: Coarse Float Write (r32f)| 7: Coarse Float Read (r32f)
+// 0: Fine Float Write (r16f)   | 1: Fine Float Read (r16f)    | 2: Atomic RW (r32ui)
+// 3: SSBO Write (std430)       | 4: SSBO Read (std430)        | 5: Atomic Visual (r16f)
+// 6: Coarse Float Write (r32f) | 7: Coarse Float Read (r32f)
 layout(r16f, set = 0, binding = 0) restrict uniform image2DArray write_tex;
 layout(r16f, set = 0, binding = 1) restrict readonly uniform image2DArray read_tex;
 layout(r32ui, set = 0, binding = 2) uniform uimage2DArray atomic_tex;
@@ -34,51 +23,35 @@ layout(r16f, set = 0, binding = 5) restrict writeonly uniform image2DArray atomi
 layout(r32f, set = 0, binding = 6) restrict uniform image2DArray coarse_write_tex;
 layout(r32f, set = 0, binding = 7) restrict readonly uniform image2DArray coarse_read_tex;
 
-// === PUSH CONSTANTS ===
-// Order MUST match the push_constants_resources array in biome_classifier_sim.tres.
-//   float deltaTime            @ offset 0   (LayerSimulator injects at 0)
-//   int   f_ground_temp        @ offset 4   -- LANDSCAPE float sub-layer 4
-//   int   f_air_temp           @ offset 8   -- ATMOSPHERE float sub-layer 2
-//   int   f_water_temp         @ offset 12  -- WATER float sub-layer 6
-//   int   f_humidity           @ offset 16  -- ATMOSPHERE float sub-layer 3
-//   int   f_water_liquid_height@ offset 20  -- WATER float sub-layer 0
-//   int   f_water_ice_height   @ offset 24  -- WATER float sub-layer 1
-//   int   a_trees_canopy       @ offset 28  -- FLORA atomic sub-layer 2
-//   int   a_grasses            @ offset 32  -- FLORA atomic sub-layer 0
-//   int   a_shrubs             @ offset 36  -- FLORA atomic sub-layer 1
-//   int   a_salinity           @ offset 40  -- WATER atomic sub-layer 3
-//   int   a_biome_type         @ offset 44  -- LANDSCAPE atomic sub-layer 3
-//   int   a_action_key         @ offset 48  -- PLAYER_ACTIONS atomic sub-layer 0
-//   float atomic_multiplier    @ offset 52  -- WorldConfig.atomic_multiplier
-//   float flora_atomic_multiplier @ offset 56 -- WorldConfig.flora_atomic_multiplier
-// Total: 60 bytes, padded to 64 (plan section 2.4).
 layout(push_constant) uniform Params {
-    float deltaTime;
+    float deltaTime; // Time step duration in seconds
 
-    // --- AUTO-INJECTED LAYER INDICES ---
-    int f_ground_temp;          // LANDSCAPE float layer 4 (GROUND_TEMP)
-    int f_air_temp;             // ATMOSPHERE float layer 2 (AIR_TEMP)
-    int f_water_temp;           // WATER float layer 6 (WATER_TEMP)
-    int f_humidity;             // ATMOSPHERE float layer 3 (HUMIDITY)
-    int f_water_liquid_height;  // WATER float layer 0 (WATER_LIQUID_HEIGHT)
-    int f_water_ice_height;     // WATER float layer 1 (WATER_ICE_HEIGHT)
-    int a_trees_canopy;         // FLORA atomic layer 2 (TREES_CANOPY)
-    int a_grasses;              // FLORA atomic layer 0 (GRASSES)
-    int a_shrubs;               // FLORA atomic layer 1 (SHRUBS)
-    int a_salinity;             // WATER atomic layer 3 (SALINITY)
-    int a_biome_type;           // LANDSCAPE atomic layer 3 (BIOME_TYPE)
-    int a_action_key;           // PLAYER_ACTIONS atomic layer 0 (ACTION_KEY bitmask)
+    // Input layer indices (read from read_tex)
+    int f_ground_temp;         // Index of ground temperature layer in float texture array
+    int f_air_temp;            // Index of air temperature layer in float texture array
+    int f_water_temp;          // Index of water temperature layer in float texture array
+    int f_humidity;            // Index of atmospheric humidity layer in float texture array
+    int f_water_liquid_height; // Index of liquid water depth layer in float texture array
+    int f_water_ice_height;    // Index of ice thickness layer in float texture array
 
-    // --- WORLD CONFIG CONSTANTS ---
-    float atomic_multiplier;        // uint -> float conversion (WATER/LANDSCAPE)
-    float flora_atomic_multiplier;  // uint -> float conversion (FLORA)
+    // Atomic storage layer indices
+    int a_trees_canopy; // Index of tree canopy biomass layer in atomic texture array
+    int a_grasses;      // Index of grass biomass layer in atomic texture array
+    int a_shrubs;       // Index of shrub biomass layer in atomic texture array
+    int a_salinity;     // Index of salinity layer in atomic texture array
+    int a_biome_type;   // Index of biome classification layer in atomic texture array
+    int a_action_key;   // Index of player action key bitmask layer in atomic texture array
+
+    float atomic_multiplier;       // Scale factor converting physical float units to fixed-point uint
+    float flora_atomic_multiplier; // Scale factor converting vegetation biomass to fixed-point uint
 } params;
 
 // ===== GENERATED BIOME TABLES — DO NOT EDIT BELOW (tools/generate_biome_tables.py) =====
 const uint BIOME_COUNT = 18u;
-const uint BIOME_UNCLASSIFIED = 255u; // sentinel: 'not yet evaluated' (plan §2.1)
-const float HYSTERESIS_DELTA = 0.15;
+const uint BIOME_UNCLASSIFIED = 255u; // Sentinel indicating unclassified terrain
+const float HYSTERESIS_DELTA = 0.15;  // Hysteresis threshold required to switch biomes
 
+// Nearest-centroid dot product weights for the 18 biomes:
 // Score_k = dot(x_part1, BIOME_TMWV[k]) + dot(x_part2, BIOME_HS[k]) - BIOME_OFFSET[k]
 const vec4 BIOME_TMWV[18] = vec4[](
     vec4(0.111, 0.029, 0.771, 0.0), // Glacial Ice Sheet
@@ -141,29 +114,27 @@ const float BIOME_OFFSET[18] = float[](
     1.050949 // Pelagic Deep Ocean
 );
 
-// Normalization constants for the 6D feature vector (plan §2.2).
-const float DEPTH_LOG_DIVISOR = 3.5;  // log10(1 + depth_m) / 3.5
-const float TEMP_RANGE = 90.0;               // (temp_c + 40) / 90.0
+// Normalization divisors for the 6D feature vector
+const float DEPTH_LOG_DIVISOR = 3.5;  // Compresses [0, 3500m] water depth into [0, 1] via log10 scale
+const float TEMP_RANGE = 90.0;        // Normalizes temperature from [-40°C, 50°C] into [0, 1]
 const float TEMP_MIN_C = -40.0;
-const float K_TREE = 5.0;
-const float K_SHRUB = 3.0;
-const float K_GRASS = 1.0;
+const float K_TREE = 5.0;             // Tree canopy saturation density
+const float K_SHRUB = 3.0;            // Shrub cover saturation density
+const float K_GRASS = 1.0;            // Grass cover saturation density
 // ===== END GENERATED BIOME TABLES =====
 
-// === GENERATED CODE INJECTION POINT (tools/generate_biome_tables.py) ===
-
-// Evaluates the 18-challenger nearest-centroid score for a normalized feature
-// vector split as (T, M, W, V_tree) + (V_herb, S): Score_k = x*b_k - C_k.
+// Evaluates the nearest-centroid score for a biome candidate: higher score indicates closer Euclidean distance
 float evaluate_score(uint k, vec4 x_part1, vec2 x_part2) {
     return dot(x_part1, BIOME_TMWV[k]) + dot(x_part2, BIOME_HS[k]) - BIOME_OFFSET[k];
 }
 
 void main() {
+    // Determine 2D coordinate for this compute thread within the world grid
     ivec2 id = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(read_tex).xy;
     if (id.x >= size.x || id.y >= size.y) return;
 
-    // --- 1. Fetch 6D feature sources ---
+    // 1. Fetch environmental state variables from the read snapshot
     float ground_temp = imageLoad(read_tex, ivec3(id, params.f_ground_temp)).r;
     float air_temp    = imageLoad(read_tex, ivec3(id, params.f_air_temp)).r;
     float water_temp  = imageLoad(read_tex, ivec3(id, params.f_water_temp)).r;
@@ -171,18 +142,18 @@ void main() {
     float liquid_h    = imageLoad(read_tex, ivec3(id, params.f_water_liquid_height)).r;
     float ice_h       = imageLoad(read_tex, ivec3(id, params.f_water_ice_height)).r;
 
+    // Read salinity and flora biomass from atomic storage
     uint u_salinity = imageLoad(atomic_tex, ivec3(id, params.a_salinity)).r;
     uint u_grasses  = imageLoad(atomic_tex, ivec3(id, params.a_grasses)).r;
     uint u_shrubs   = imageLoad(atomic_tex, ivec3(id, params.a_shrubs)).r;
     uint u_trees    = imageLoad(atomic_tex, ivec3(id, params.a_trees_canopy)).r;
 
-    // --- 2. Build the normalized 6D feature vector x (plan section 2.2) ---
-    float depth_m = (liquid_h + ice_h) * 100.0; // hectometers -> meters
+    // 2. Build normalized 6D feature vector x = (Temperature, Moisture, Water Depth, Tree Density, Herbaceous Cover, Salinity)
+    float depth_m = (liquid_h + ice_h) * 100.0;
     float submerged = step(0.0001, liquid_h + ice_h);
-    // (GLSL has no log10; log2(x)/log2(10) is the exact base-10 logarithm.)
     float w_norm = clamp(log2(1.0 + depth_m) / DEPTH_LOG_DIVISOR, 0.0, 1.0);
 
-    // Submerged cells must not blend seafloor ground_temp with surface air (7.5).
+    // Submerged marine cells evaluate water temperature; dry land evaluates ground/air average
     float temp_c = mix(mix(ground_temp, air_temp, 0.5), water_temp, submerged);
     float t_norm = clamp((temp_c - TEMP_MIN_C) / TEMP_RANGE, 0.0, 1.0);
 
@@ -200,46 +171,37 @@ void main() {
     vec4 x_part1 = vec4(t_norm, m_norm, w_norm, v_tree);
     vec2 x_part2 = vec2(v_herb, s_norm);
 
-    // --- 3. Incumbent score with the sentinel guard (plan 2.4/2.6) ---
-    // Valid incumbents are 0..17 ONLY. Anything else (255 = unclassified, any
-    // other value defensively) classifies immediately — no hysteresis — and
-    // prevents out-of-bounds centroid indexing on undefined VRAM contents.
+    // 3. Evaluate incumbent score with sentinel check:
+    // Cells with ID > 17 (unclassified 255) bypass hysteresis to classify immediately
     uint current_texel = imageLoad(atomic_tex, ivec3(id, params.a_biome_type)).r;
     uint current_biome_id = current_texel & 0xFFu;
     bool unclassified = (current_biome_id > 17u);
-    // Clamp the incumbent to a valid index before evaluating its score.
     float current_score = unclassified ? -1e9 : evaluate_score(min(current_biome_id, 17u), x_part1, x_part2);
 
-    // --- 4. Challenger sweep ---
+    // 4. Sweep all 18 challenger biome centroids to find the best match
     float best_challenger_score = -1e9;
     uint best_challenger_id = current_biome_id;
     for (uint i = 0u; i < BIOME_COUNT; i++) {
         float s = evaluate_score(i, x_part1, x_part2);
-        // Strict '>' keeps the FIRST maximum — catalog order breaks ties
-        // deterministically, identically to the seeding generator.
         if (s > best_challenger_score) {
             best_challenger_score = s;
             best_challenger_id = i;
         }
     }
 
-    // --- 5. Attribution snapshot: the spell-presence bitmask rides in the
-    //       upper 24 bits. Captured EVERY write (even self-healing ones) so
-    //       the CPU diff always has a causation record (plan 2.4). ---
+    // 5. Attribution snapshot: active spell presence bitmask is stored in the upper 24 bits
     uint action_key = imageLoad(atomic_tex, ivec3(id, params.a_action_key)).r & 0xFFFFFFu;
     uint new_texel = (action_key << 8) | (best_challenger_id & 0xFFu);
 
-    // --- 6. Unclassified cells adopt the winner silently (self-heal, 2.6). ---
+    // 6. Unclassified cells adopt the winning biome unconditionally
     if (unclassified) {
         imageStore(atomic_tex, ivec3(id, params.a_biome_type), uvec4(new_texel, 0u, 0u, 0u));
         return;
     }
 
-    // --- 7. Transition rule: the challenger must definitively exceed the
-    //       incumbent by the hysteresis margin (border-flutter suppression
-    //       against diurnal and seasonal oscillation, 2.4). ---
+    // 7. Hysteresis gating: challenger must exceed the incumbent by the hysteresis delta
+    // to suppress border flickering caused by daily temperature cycles
     if (best_challenger_id != current_biome_id && (best_challenger_score > current_score + HYSTERESIS_DELTA)) {
-        // Single plain store — biome ID + attribution. No event, no counter, no race.
         imageStore(atomic_tex, ivec3(id, params.a_biome_type), uvec4(new_texel, 0u, 0u, 0u));
     }
 }
